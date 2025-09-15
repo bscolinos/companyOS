@@ -1,0 +1,110 @@
+version: '3.8'
+
+services:
+  # SingleStore Database
+  singlestore:
+    image: singlestore/cluster-in-a-box:latest
+    container_name: singlestore-db
+    ports:
+      - "3306:3306"
+      - "8080:8080"
+    environment:
+      - SINGLESTORE_LICENSE=BGY4YjY2ZGE3NzYwNDNmNGI4ZGE0Yzk4YjBiMGY0YTNhAAAAAAAAAAAEAAAAAAAAACgwNQIYRm9yIGVkdWNhdGlvbmFsIHB1cnBvc2VzIG9ubHkCGQDvr2VdvbR1vt6KhLGIJLx7vJjCbkELAAAA
+    volumes:
+      - singlestore_data:/var/lib/singlestore
+    healthcheck:
+      test: ["CMD", "mysql", "-h", "localhost", "-P", "3306", "-u", "root", "-e", "SELECT 1"]
+      timeout: 20s
+      retries: 10
+    networks:
+      - ai-commerce-network
+
+  # Redis for agent coordination
+  redis:
+    image: redis:7-alpine
+    container_name: redis-cache
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - ai-commerce-network
+
+  # FastAPI Backend
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: ai-commerce-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - SINGLESTORE_HOST=singlestore
+      - SINGLESTORE_PORT=3306
+      - SINGLESTORE_USER=root
+      - SINGLESTORE_PASSWORD=
+      - SINGLESTORE_DATABASE=ecommerce_ai
+      - REDIS_URL=redis://redis:6379
+      - SECRET_KEY=your-secret-key-change-in-production
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ENABLE_AUTO_PRICING=true
+      - ENABLE_AUTO_INVENTORY=true
+      - ENABLE_AUTO_RECOMMENDATIONS=true
+    depends_on:
+      singlestore:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    volumes:
+      - ./backend:/app
+    networks:
+      - ai-commerce-network
+    restart: unless-stopped
+
+  # React Frontend
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        - REACT_APP_API_URL=http://localhost:8000
+    container_name: ai-commerce-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - REACT_APP_API_URL=http://localhost:8000
+    depends_on:
+      - backend
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    networks:
+      - ai-commerce-network
+    restart: unless-stopped
+
+  # Nginx Reverse Proxy (Production)
+  nginx:
+    image: nginx:alpine
+    container_name: ai-commerce-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf
+      - ./nginx/ssl:/etc/nginx/ssl
+    depends_on:
+      - frontend
+      - backend
+    networks:
+      - ai-commerce-network
+    restart: unless-stopped
+    profiles:
+      - production
+
+volumes:
+  singlestore_data:
+  redis_data:
+
+networks:
+  ai-commerce-network:
+    driver: bridge
