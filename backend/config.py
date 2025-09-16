@@ -21,8 +21,6 @@ class Settings(BaseSettings):
     # OpenAI Configuration
     openai_api_key: str = os.getenv("OPENAI_API_KEY", "")
     
-    # Redis Configuration
-    redis_url: str = os.getenv("REDIS_URL", "redis://localhost:6379")
     
     # External APIs
     stripe_secret_key: str = os.getenv("STRIPE_SECRET_KEY", "")

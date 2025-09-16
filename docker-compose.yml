@@ -19,17 +19,6 @@ services:
     networks:
       - ai-commerce-network
 
-  # Redis for agent coordination
-  redis:
-    image: redis:7-alpine
-    container_name: redis-cache
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
-    networks:
-      - ai-commerce-network
-
   # FastAPI Backend
   backend:
     build:
@@ -44,7 +33,6 @@ services:
       - SINGLESTORE_USER=root
       - SINGLESTORE_PASSWORD=
       - SINGLESTORE_DATABASE=ecommerce_ai
-      - REDIS_URL=redis://redis:6379
       - SECRET_KEY=your-secret-key-change-in-production
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - ENABLE_AUTO_PRICING=true
@@ -53,8 +41,6 @@ services:
     depends_on:
       singlestore:
         condition: service_healthy
-      redis:
-        condition: service_started
     volumes:
       - ./backend:/app
     networks:
@@ -103,7 +89,6 @@ services:
 
 volumes:
   singlestore_data:
-  redis_data:
 
 networks:
   ai-commerce-network:

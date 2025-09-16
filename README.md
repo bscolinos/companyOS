@@ -24,7 +24,6 @@ A fully autonomous ecommerce platform that runs entirely with AI agents, featuri
 - **Frontend**: React with TypeScript and Tailwind CSS
 - **AI/ML**: OpenAI GPT integration with custom algorithms
 - **Deployment**: Docker with container orchestration
-- **Caching**: Redis for high-performance data access
 
 ## 🚀 Quick Start
 
@@ -114,7 +113,6 @@ graph TB
     
     subgraph "Data Layer"
         SS[(SingleStore DB)]
-        Redis[(Redis Cache)]
     end
     
     subgraph "External Services"
@@ -132,7 +130,6 @@ graph TB
     PA --> SS
     CS --> SS
     RA --> SS
-    FastAPI --> Redis
     CS --> OpenAI
     RA --> OpenAI
     CS --> Email

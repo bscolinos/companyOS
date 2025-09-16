@@ -59,7 +59,6 @@ graph TB
     
     subgraph "Data Layer"
         SS[SingleStore DB<br/>Port 3306]
-        Redis[Redis Cache<br/>Port 6379]
     end
     
     subgraph "Reverse Proxy"
@@ -72,7 +71,6 @@ graph TB
     FastAPI --> CS
     FastAPI --> RA
     FastAPI --> SS
-    FastAPI --> Redis
     Nginx --> React
     Nginx --> FastAPI
 ```
@@ -290,7 +288,6 @@ docker-compose exec -T singlestore mysql -u root ecommerce_ai < backup.sql
    - Use connection pooling
 
 2. **Caching**
-   - Redis is configured for session and data caching
    - Enable browser caching for static assets
    - Use CDN for production deployments
 

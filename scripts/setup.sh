@@ -22,7 +22,6 @@ fi
 echo "📁 Creating directories..."
 mkdir -p nginx/ssl
 mkdir -p data/singlestore
-mkdir -p data/redis
 mkdir -p logs
 
 # Set up environment variables
@@ -43,9 +42,6 @@ ACCESS_TOKEN_EXPIRE_MINUTES=30
 
 # OpenAI Configuration (Add your API key here)
 OPENAI_API_KEY=
-
-# Redis Configuration
-REDIS_URL=redis://redis:6379
 
 # External APIs (Optional)
 STRIPE_SECRET_KEY=

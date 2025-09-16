@@ -80,9 +80,11 @@ def init_database():
             cursor.execute(f"CREATE DATABASE IF NOT EXISTS {settings.singlestore_database}")
             cursor.execute(f"USE {settings.singlestore_database}")
             
-            # Create tables
+            # Create tables with SingleStore-optimized DDL
             create_tables_sql = """
             -- Users table
+            -- Shard key: id (auto-increment provides good distribution)
+            -- Sort key: email (frequent lookup), created_at (for admin queries)
             CREATE TABLE IF NOT EXISTS users (
                 id BIGINT AUTO_INCREMENT PRIMARY KEY,
                 email VARCHAR(255) UNIQUE NOT NULL,
@@ -95,11 +97,16 @@ def init_database():
                 is_admin BOOLEAN DEFAULT FALSE,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-                KEY(email),
-                KEY(username)
+                SHARD KEY (id),
+                SORT KEY (email, created_at),
+                INDEX(email) USING HASH,
+                INDEX(username) USING HASH,
+                INDEX(is_active) USING HASH
             );
 
-            -- Categories table
+            -- Categories table  
+            -- Shard key: id (good distribution for small table)
+            -- Sort key: name (frequent lookups), is_active (filtering)
             CREATE TABLE IF NOT EXISTS categories (
                 id BIGINT AUTO_INCREMENT PRIMARY KEY,
                 name VARCHAR(100) NOT NULL,
@@ -107,11 +114,16 @@ def init_database():
                 parent_id BIGINT,
                 is_active BOOLEAN DEFAULT TRUE,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                KEY(name),
-                FOREIGN KEY (parent_id) REFERENCES categories(id)
+                SHARD KEY (id),
+                SORT KEY (name, is_active),
+                INDEX(name) USING HASH,
+                INDEX(is_active) USING HASH,
+                INDEX(parent_id) USING HASH
             );
 
             -- Products table
+            -- Shard key: id (high cardinality, good distribution) 
+            -- Sort key: is_featured, demand_score, created_at (matches ORDER BY in queries)
             CREATE TABLE IF NOT EXISTS products (
                 id BIGINT AUTO_INCREMENT PRIMARY KEY,
                 name VARCHAR(255) NOT NULL,
@@ -135,17 +147,22 @@ def init_database():
                 seasonality_factor DECIMAL(5,2) DEFAULT 1.0,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-                KEY(name),
-                KEY(sku),
-                KEY(category_id),
-                KEY(is_active),
-                KEY(is_featured),
-                FOREIGN KEY (category_id) REFERENCES categories(id)
+                SHARD KEY (id),
+                SORT KEY (is_featured, demand_score, created_at),
+                INDEX(sku) USING HASH,
+                INDEX(category_id) USING HASH,
+                INDEX(is_active) USING HASH,
+                INDEX(is_featured) USING HASH,
+                INDEX(current_price) USING BTREE,
+                INDEX(stock_quantity) USING BTREE,
+                INDEX(name) USING HASH
             );
 
             -- Orders table
+            -- Shard key: user_id (distributes by customer, enables efficient user queries)
+            -- Sort key: created_at (time-based queries), status (filtering)
             CREATE TABLE IF NOT EXISTS orders (
-                id BIGINT AUTO_INCREMENT PRIMARY KEY,
+                id BIGINT AUTO_INCREMENT,
                 user_id BIGINT NOT NULL,
                 order_number VARCHAR(50) UNIQUE NOT NULL,
                 status VARCHAR(50) DEFAULT 'pending',
@@ -166,47 +183,58 @@ def init_database():
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                 shipped_at TIMESTAMP NULL,
                 delivered_at TIMESTAMP NULL,
-                KEY(user_id),
-                KEY(order_number),
-                KEY(status),
-                KEY(created_at),
-                FOREIGN KEY (user_id) REFERENCES users(id)
+                PRIMARY KEY (user_id, id),
+                SHARD KEY (user_id),
+                SORT KEY (created_at, status),
+                INDEX(id) USING HASH,
+                INDEX(order_number) USING HASH,
+                INDEX(status) USING HASH,
+                INDEX(created_at) USING BTREE,
+                INDEX(payment_status) USING HASH
             );
 
             -- Order Items table
+            -- Shard key: order_id (groups items with orders, enables efficient order queries)
+            -- Sort key: product_id (for product analysis)
             CREATE TABLE IF NOT EXISTS order_items (
-                id BIGINT AUTO_INCREMENT PRIMARY KEY,
+                id BIGINT AUTO_INCREMENT,
                 order_id BIGINT NOT NULL,
                 product_id BIGINT NOT NULL,
                 quantity INT NOT NULL,
                 unit_price DECIMAL(10,2) NOT NULL,
                 total_price DECIMAL(10,2) NOT NULL,
-                KEY(order_id),
-                KEY(product_id),
-                FOREIGN KEY (order_id) REFERENCES orders(id),
-                FOREIGN KEY (product_id) REFERENCES products(id)
+                PRIMARY KEY (order_id, id),
+                SHARD KEY (order_id),
+                SORT KEY (product_id),
+                INDEX(product_id) USING HASH,
+                INDEX(id) USING HASH
             );
 
             -- Cart Items table
+            -- Shard key: user_id (distributes by user, enables efficient user cart queries)
+            -- Sort key: created_at (for cart ordering)
             CREATE TABLE IF NOT EXISTS cart_items (
-                id BIGINT AUTO_INCREMENT PRIMARY KEY,
+                id BIGINT AUTO_INCREMENT,
                 user_id BIGINT NOT NULL,
                 product_id BIGINT NOT NULL,
                 quantity INT NOT NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-                KEY(user_id),
-                KEY(product_id),
-                FOREIGN KEY (user_id) REFERENCES users(id),
-                FOREIGN KEY (product_id) REFERENCES products(id)
+                PRIMARY KEY (user_id, id),
+                SHARD KEY (user_id),
+                SORT KEY (created_at),
+                INDEX(product_id) USING HASH,
+                INDEX(id) USING HASH
             );
 
             -- Reviews table
+            -- Shard key: product_id (distributes by product, enables efficient product review queries)
+            -- Sort key: created_at (for chronological ordering), rating (for filtering)
             CREATE TABLE IF NOT EXISTS reviews (
-                id BIGINT AUTO_INCREMENT PRIMARY KEY,
+                id BIGINT AUTO_INCREMENT,
                 user_id BIGINT NOT NULL,
                 product_id BIGINT NOT NULL,
-                rating INT NOT NULL CHECK (rating >= 1 AND rating <= 5),
+                rating INT NOT NULL,
                 title VARCHAR(255),
                 comment TEXT,
                 is_verified_purchase BOOLEAN DEFAULT FALSE,
@@ -214,17 +242,20 @@ def init_database():
                 sentiment_score DECIMAL(3,2),
                 helpful_votes INT DEFAULT 0,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                KEY(user_id),
-                KEY(product_id),
-                KEY(rating),
-                KEY(created_at),
-                FOREIGN KEY (user_id) REFERENCES users(id),
-                FOREIGN KEY (product_id) REFERENCES products(id)
+                PRIMARY KEY (product_id, id),
+                SHARD KEY (product_id),
+                SORT KEY (created_at, rating),
+                INDEX(user_id) USING HASH,
+                INDEX(rating) USING HASH,
+                INDEX(is_approved) USING HASH,
+                INDEX(id) USING HASH
             );
 
             -- Inventory Logs table
+            -- Shard key: product_id (distributes by product, enables efficient product history queries)
+            -- Sort key: created_at (time-series data), change_type (for filtering)
             CREATE TABLE IF NOT EXISTS inventory_logs (
-                id BIGINT AUTO_INCREMENT PRIMARY KEY,
+                id BIGINT AUTO_INCREMENT,
                 product_id BIGINT NOT NULL,
                 change_type VARCHAR(50) NOT NULL,
                 quantity_change INT NOT NULL,
@@ -233,16 +264,20 @@ def init_database():
                 reason VARCHAR(255),
                 agent_action BOOLEAN DEFAULT FALSE,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                KEY(product_id),
-                KEY(change_type),
-                KEY(created_at),
-                KEY(agent_action),
-                FOREIGN KEY (product_id) REFERENCES products(id)
+                PRIMARY KEY (product_id, id),
+                SHARD KEY (product_id),
+                SORT KEY (created_at, change_type),
+                INDEX(change_type) USING HASH,
+                INDEX(agent_action) USING HASH,
+                INDEX(created_at) USING BTREE,
+                INDEX(id) USING HASH
             );
 
             -- Price History table
+            -- Shard key: product_id (distributes by product, enables efficient product price history)
+            -- Sort key: created_at (time-series data), agent_action (for filtering)
             CREATE TABLE IF NOT EXISTS price_history (
-                id BIGINT AUTO_INCREMENT PRIMARY KEY,
+                id BIGINT AUTO_INCREMENT,
                 product_id BIGINT NOT NULL,
                 old_price DECIMAL(10,2) NOT NULL,
                 new_price DECIMAL(10,2) NOT NULL,
@@ -250,15 +285,19 @@ def init_database():
                 agent_action BOOLEAN DEFAULT FALSE,
                 market_data JSON,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                KEY(product_id),
-                KEY(created_at),
-                KEY(agent_action),
-                FOREIGN KEY (product_id) REFERENCES products(id)
+                PRIMARY KEY (product_id, id),
+                SHARD KEY (product_id),
+                SORT KEY (created_at, agent_action),
+                INDEX(agent_action) USING HASH,
+                INDEX(created_at) USING BTREE,
+                INDEX(id) USING HASH
             );
 
             -- Agent Logs table
+            -- Shard key: agent_name (distributes by agent, enables efficient per-agent queries)
+            -- Sort key: created_at (time-series data), action_type (for filtering)
             CREATE TABLE IF NOT EXISTS agent_logs (
-                id BIGINT AUTO_INCREMENT PRIMARY KEY,
+                id BIGINT AUTO_INCREMENT,
                 agent_name VARCHAR(100) NOT NULL,
                 action_type VARCHAR(100) NOT NULL,
                 target_id BIGINT,
@@ -268,15 +307,21 @@ def init_database():
                 error_message TEXT,
                 execution_time DECIMAL(8,3),
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                KEY(agent_name),
-                KEY(action_type),
-                KEY(created_at),
-                KEY(result)
+                PRIMARY KEY (agent_name, id),
+                SHARD KEY (agent_name),
+                SORT KEY (created_at, action_type),
+                INDEX(action_type) USING HASH,
+                INDEX(result) USING HASH,
+                INDEX(created_at) USING BTREE,
+                INDEX(target_id) USING HASH,
+                INDEX(id) USING HASH
             );
 
             -- Customer Interactions table
+            -- Shard key: user_id (distributes by customer, enables efficient user interaction queries)
+            -- Sort key: created_at (time-series data), status (for filtering)
             CREATE TABLE IF NOT EXISTS customer_interactions (
-                id BIGINT AUTO_INCREMENT PRIMARY KEY,
+                id BIGINT AUTO_INCREMENT,
                 user_id BIGINT,
                 interaction_type VARCHAR(50) NOT NULL,
                 subject VARCHAR(255),
@@ -285,14 +330,18 @@ def init_database():
                 status VARCHAR(50) DEFAULT 'open',
                 priority VARCHAR(20) DEFAULT 'medium',
                 agent_handled BOOLEAN DEFAULT FALSE,
-                satisfaction_score INT CHECK (satisfaction_score >= 1 AND satisfaction_score <= 5),
+                satisfaction_score INT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 resolved_at TIMESTAMP NULL,
-                KEY(user_id),
-                KEY(interaction_type),
-                KEY(status),
-                KEY(created_at),
-                FOREIGN KEY (user_id) REFERENCES users(id)
+                PRIMARY KEY (user_id, id),
+                SHARD KEY (user_id),
+                SORT KEY (created_at, status),
+                INDEX(interaction_type) USING HASH,
+                INDEX(status) USING HASH,
+                INDEX(priority) USING HASH,
+                INDEX(agent_handled) USING HASH,
+                INDEX(created_at) USING BTREE,
+                INDEX(id) USING HASH
             );
             """
             
