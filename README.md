@@ -150,8 +150,12 @@ The admin dashboard provides comprehensive insights:
 ### Environment Setup
 ```bash
 # Core Configuration
-SINGLESTORE_HOST=singlestore
-OPENAI_API_KEY=your-openai-key
+SINGLESTORE_HOST="x"
+SINGLESTORE_PORT=3306
+SINGLESTORE_USER='y'
+SINGLESTORE_PASSWORD="z"
+SINGLESTORE_DATABASE=company_os
+OPENAI_API_KEY="s"
 
 # Agent Settings
 ENABLE_AUTO_PRICING=true
@@ -264,3 +268,4 @@ This project is for educational and demonstration purposes. Please ensure compli
 ---
 
 **🎉 Experience the future of autonomous ecommerce today!**
+
