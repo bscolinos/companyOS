@@ -5,10 +5,10 @@ from passlib.context import CryptContext
 from jose import JWTError, jwt
 from datetime import datetime, timedelta
 import logging
-from backend.database.connection import get_database
-from backend.database.models import User
-from backend.database.operations import UserOperations
-from backend.config import settings
+from database.connection import get_database
+from database.models import User
+from database.operations import UserOperations
+from config import settings
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -88,11 +88,15 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(securit
         
         return user
 
-def get_current_active_user(current_user: User = Depends(get_current_user)):
-    """Get current active user"""
-    if not current_user.is_active:
-        raise HTTPException(status_code=400, detail="Inactive user")
-    return current_user
+def get_current_active_user():
+    """Simulate current active user - no auth needed"""
+    # Return mock user for simulation
+    return {
+        "id": 1,
+        "email": "demo@example.com",
+        "is_active": True,
+        "is_admin": True
+    }
 
 @router.post("/register", response_model=UserResponse)
 async def register_user(user_data: UserCreate):
@@ -180,34 +184,25 @@ async def login_user(user_data: UserLogin):
         raise HTTPException(status_code=500, detail="Login failed")
 
 @router.get("/me", response_model=UserResponse)
-async def get_current_user_info(current_user: User = Depends(get_current_active_user)):
-    """Get current user information"""
-    return UserResponse(
-        id=current_user.id,
-        email=current_user.email,
-        username=current_user.username,
-        first_name=current_user.first_name,
-        last_name=current_user.last_name,
-        is_active=current_user.is_active,
-        is_admin=current_user.is_admin,
-        created_at=current_user.created_at
-    )
+async def get_current_user_info():
+    """Get current user information - simulated"""
+    return {
+        "id": 1,
+        "email": "demo@example.com",
+        "username": "demo_user",
+        "first_name": "Demo",
+        "last_name": "User",
+        "is_active": True,
+        "is_admin": True,
+        "created_at": "2024-01-01T00:00:00Z"
+    }
 
 @router.post("/refresh")
-async def refresh_token(current_user: User = Depends(get_current_active_user)):
+async def refresh_token():
     """Refresh access token"""
-    try:
-        access_token_expires = timedelta(minutes=settings.access_token_expire_minutes)
-        access_token = create_access_token(
-            data={"sub": str(current_user.id)}, expires_delta=access_token_expires
-        )
-        
-        return Token(
-            access_token=access_token,
-            token_type="bearer",
-            expires_in=settings.access_token_expire_minutes * 60
-        )
-        
-    except Exception as e:
-        logger.error(f"Error refreshing token: {e}")
-        raise HTTPException(status_code=500, detail="Token refresh failed")
+    # Return mock token for simulation
+    return {
+        "access_token": "mock_access_token_123",
+        "token_type": "bearer",
+        "expires_in": 3600
+    }

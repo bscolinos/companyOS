@@ -3,9 +3,9 @@ from typing import Dict, Any, Optional, List
 from datetime import datetime
 import asyncio
 import logging
-from backend.database.connection import get_db_connection
-from backend.database.models import AgentLog
-from backend.database.operations import AgentLogOperations
+from database.connection import get_db_connection
+from database.models import AgentLog
+from database.operations import AgentLogOperations
 import json
 import time
 

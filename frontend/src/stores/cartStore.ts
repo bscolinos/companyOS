@@ -1,5 +1,6 @@
 import { create } from 'zustand';
-import { cartService, CartItem } from '../services/cartService';
+import { cartService } from '../services/cartService';
+import { CartItem } from '../types';
 import toast from 'react-hot-toast';
 
 interface CartState {
@@ -26,7 +27,7 @@ export const useCartStore = create<CartState>((set, get) => ({
     try {
       const items = await cartService.getCart();
       const totalItems = items.reduce((sum, item) => sum + item.quantity, 0);
-      const totalAmount = items.reduce((sum, item) => sum + item.total_price, 0);
+      const totalAmount = items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
       
       set({ 
         items, 

@@ -1,23 +1,5 @@
 import { apiService } from './api';
-
-export interface CartItem {
-  id: number;
-  product_id: number;
-  product_name: string;
-  product_price: number;
-  quantity: number;
-  total_price: number;
-  product_images: string[];
-  stock_available: number;
-}
-
-export interface CartSummary {
-  total_items: number;
-  subtotal: number;
-  tax_amount: number;
-  shipping_amount: number;
-  total_amount: number;
-}
+import { CartItem, CartSummary } from '../types';
 
 class CartService {
   async getCart(): Promise<CartItem[]> {

@@ -1,29 +1,5 @@
 import { apiService } from './api';
-
-export interface User {
-  id: number;
-  email: string;
-  username: string;
-  first_name: string;
-  last_name: string;
-  is_active: boolean;
-  is_admin: boolean;
-  created_at: string;
-}
-
-export interface LoginResponse {
-  user: User;
-  token: string;
-}
-
-export interface RegisterData {
-  email: string;
-  username: string;
-  password: string;
-  first_name: string;
-  last_name: string;
-  phone?: string;
-}
+import { User, LoginResponse, RegisterData } from '../types';
 
 class AuthService {
   async login(email: string, password: string): Promise<LoginResponse> {
@@ -34,12 +10,11 @@ class AuthService {
       localStorage.setItem('auth_token', response.access_token);
     }
     
-    // Get user info
-    const user = await this.getCurrentUser();
-    
     return {
-      user,
-      token: response.access_token
+      user: response.user,
+      token: response.access_token,
+      access_token: response.access_token,
+      token_type: response.token_type
     };
   }
 

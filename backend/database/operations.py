@@ -1,7 +1,7 @@
 from typing import Dict, Any, List, Optional
 import json
-from backend.database.models import *
-from backend.database.connection import get_db_connection
+from database.models import *
+from database.connection import get_db_connection
 
 class DatabaseOperations:
     """Database operations using SingleStore native driver"""
@@ -132,9 +132,9 @@ class ProductOperations:
                 base_price=float(row[5]), current_price=float(row[6]), cost_price=float(row[7]) if row[7] else None,
                 stock_quantity=row[8], min_stock_level=row[9], max_stock_level=row[10],
                 weight=float(row[11]) if row[11] else None,
-                dimensions=DatabaseOperations.json_to_dict(row[12]),
-                images=DatabaseOperations.json_to_list(row[13]),
-                tags=DatabaseOperations.json_to_list(row[14]),
+                dimensions=row[12] if isinstance(row[12], dict) else DatabaseOperations.json_to_dict(row[12]),
+                images=row[13] if isinstance(row[13], list) else DatabaseOperations.json_to_list(row[13]),
+                tags=row[14] if isinstance(row[14], list) else DatabaseOperations.json_to_list(row[14]),
                 is_active=row[15], is_featured=row[16], demand_score=float(row[17]),
                 price_elasticity=float(row[18]), seasonality_factor=float(row[19]),
                 created_at=row[20], updated_at=row[21]
@@ -153,9 +153,9 @@ class ProductOperations:
                 base_price=float(row[5]), current_price=float(row[6]), cost_price=float(row[7]) if row[7] else None,
                 stock_quantity=row[8], min_stock_level=row[9], max_stock_level=row[10],
                 weight=float(row[11]) if row[11] else None,
-                dimensions=DatabaseOperations.json_to_dict(row[12]),
-                images=DatabaseOperations.json_to_list(row[13]),
-                tags=DatabaseOperations.json_to_list(row[14]),
+                dimensions=row[12] if isinstance(row[12], dict) else DatabaseOperations.json_to_dict(row[12]),
+                images=row[13] if isinstance(row[13], list) else DatabaseOperations.json_to_list(row[13]),
+                tags=row[14] if isinstance(row[14], list) else DatabaseOperations.json_to_list(row[14]),
                 is_active=row[15], is_featured=row[16], demand_score=float(row[17]),
                 price_elasticity=float(row[18]), seasonality_factor=float(row[19]),
                 created_at=row[20], updated_at=row[21]
@@ -200,9 +200,9 @@ class ProductOperations:
                 base_price=float(row[5]), current_price=float(row[6]), cost_price=float(row[7]) if row[7] else None,
                 stock_quantity=row[8], min_stock_level=row[9], max_stock_level=row[10],
                 weight=float(row[11]) if row[11] else None,
-                dimensions=DatabaseOperations.json_to_dict(row[12]),
-                images=DatabaseOperations.json_to_list(row[13]),
-                tags=DatabaseOperations.json_to_list(row[14]),
+                dimensions=row[12] if isinstance(row[12], dict) else DatabaseOperations.json_to_dict(row[12]),
+                images=row[13] if isinstance(row[13], list) else DatabaseOperations.json_to_list(row[13]),
+                tags=row[14] if isinstance(row[14], list) else DatabaseOperations.json_to_list(row[14]),
                 is_active=row[15], is_featured=row[16], demand_score=float(row[17]),
                 price_elasticity=float(row[18]), seasonality_factor=float(row[19]),
                 created_at=row[20], updated_at=row[21]

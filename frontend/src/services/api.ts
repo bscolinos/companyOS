@@ -1,5 +1,17 @@
 import axios, { AxiosInstance, AxiosRequestConfig } from 'axios';
 import { useAuthStore } from '../stores/authStore';
+import {
+  User,
+  LoginResponse,
+  RegisterData,
+  Product,
+  CartItem,
+  CartSummary,
+  AgentStatus,
+  AgentPerformance,
+  DashboardAnalytics,
+  PaginatedResponse
+} from '../types';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
 
@@ -71,60 +83,91 @@ class ApiService {
   }
 
   // Auth endpoints
-  async login(email: string, password: string) {
-    return this.post('/api/auth/login', { email, password });
+  async login(email: string, password: string): Promise<LoginResponse> {
+    return this.post<LoginResponse>('/api/auth/login', { email, password });
   }
 
-  async register(userData: any) {
-    return this.post('/api/auth/register', userData);
+  async register(userData: RegisterData): Promise<User> {
+    return this.post<User>('/api/auth/register', userData);
   }
 
-  async getCurrentUser() {
-    return this.get('/api/auth/me');
+  async getCurrentUser(): Promise<User> {
+    return this.get<User>('/api/auth/me');
   }
 
   // Product endpoints
-  async getProducts(params?: any) {
-    return this.get('/api/products', { params });
+  async getProducts(params?: any): Promise<PaginatedResponse<Product>> {
+    const response = await this.get<PaginatedResponse<any>>('/api/products', { params });
+    
+    // Transform backend response to match frontend expectations
+    const transformedItems = response.items.map((item: any) => ({
+      ...item,
+      price: item.current_price || item.price || 0,
+      description: item.description || '',
+      images: item.images || [],
+      image_url: item.images && item.images.length > 0 ? item.images[0] : undefined,
+      tags: item.tags || []
+    }));
+    
+    return {
+      ...response,
+      items: transformedItems
+    };
   }
 
-  async getProduct(id: number) {
-    return this.get(`/api/products/${id}`);
+  async getProduct(id: number): Promise<Product> {
+    const product = await this.get<any>(`/api/products/${id}`);
+    return {
+      ...product,
+      price: product.current_price || product.price || 0,
+      description: product.description || '',
+      images: product.images || [],
+      image_url: product.images && product.images.length > 0 ? product.images[0] : undefined,
+      tags: product.tags || []
+    };
   }
 
-  async getFeaturedProducts() {
-    return this.get('/api/products/featured');
+  async getFeaturedProducts(): Promise<Product[]> {
+    const products = await this.get<any[]>('/api/products/featured');
+    return products.map((product: any) => ({
+      ...product,
+      price: product.current_price || product.price || 0,
+      description: product.description || '',
+      images: product.images || [],
+      image_url: product.images && product.images.length > 0 ? product.images[0] : undefined,
+      tags: product.tags || []
+    }));
   }
 
-  async getProductRecommendations(productId: number, limit?: number) {
-    return this.get(`/api/products/${productId}/recommendations`, { 
+  async getProductRecommendations(productId: number, limit?: number): Promise<Product[]> {
+    return this.get<Product[]>(`/api/products/${productId}/recommendations`, { 
       params: { limit } 
     });
   }
 
   // Cart endpoints
-  async getCart() {
-    return this.get('/api/users/cart');
+  async getCart(): Promise<CartItem[]> {
+    return this.get<CartItem[]>('/api/users/cart');
   }
 
-  async addToCart(productId: number, quantity: number) {
-    return this.post('/api/users/cart', { product_id: productId, quantity });
+  async addToCart(productId: number, quantity: number): Promise<CartItem> {
+    return this.post<CartItem>('/api/users/cart', { product_id: productId, quantity });
   }
 
-  async updateCartItem(itemId: number, quantity: number) {
-    return this.put(`/api/users/cart/${itemId}`, { quantity });
+  async updateCartItem(itemId: number, quantity: number): Promise<CartItem> {
+    return this.put<CartItem>(`/api/users/cart/${itemId}`, { quantity });
   }
 
-  async removeFromCart(itemId: number) {
-    return this.delete(`/api/users/cart/${itemId}`);
+  async removeFromCart(itemId: number): Promise<void> {
+    return this.delete<void>(`/api/users/cart/${itemId}`);
   }
 
-  async clearCart() {
-    return this.delete('/api/users/cart');
+  async clearCart(): Promise<void> {
+    return this.delete<void>('/api/users/cart');
   }
 
-  async getCartSummary() {
-    return this.get('/api/users/cart/summary');
+  async getCartSummary(): Promise<CartSummary> {
+    return this.get<CartSummary>('/api/users/cart/summary');
   }
 
   // Order endpoints
@@ -171,8 +214,8 @@ class ApiService {
   }
 
   // Analytics endpoints
-  async getDashboardAnalytics(days?: number) {
-    return this.get('/api/analytics/dashboard', { params: { days } });
+  async getDashboardAnalytics(days?: number): Promise<DashboardAnalytics> {
+    return this.get<DashboardAnalytics>('/api/analytics/dashboard', { params: { days } });
   }
 
   async getSalesAnalytics(days?: number, groupBy?: string) {
@@ -196,8 +239,8 @@ class ApiService {
   }
 
   // AI Agent endpoints
-  async getAgentStatus() {
-    return this.get('/api/agents/status');
+  async getAgentStatus(): Promise<AgentStatus> {
+    return this.get<AgentStatus>('/api/agents/status');
   }
 
   async executeAgent(agentName: string, context?: any) {
@@ -242,8 +285,8 @@ class ApiService {
     return this.post('/api/agents/pricing/optimize');
   }
 
-  async getAgentPerformance() {
-    return this.get('/api/agents/analytics/agent-performance');
+  async getAgentPerformance(): Promise<AgentPerformance> {
+    return this.get<AgentPerformance>('/api/agents/analytics/agent-performance');
   }
 
   async getAgentLogs(agentName: string, limit?: number) {

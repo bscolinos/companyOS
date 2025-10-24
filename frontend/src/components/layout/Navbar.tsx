@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { useAuthStore } from '../../stores/authStore';
 import { useCartStore } from '../../stores/cartStore';
 import { 
   ShoppingCartIcon, 
@@ -8,21 +7,20 @@ import {
   Bars3Icon, 
   XMarkIcon,
   MagnifyingGlassIcon,
-  CpuChipIcon
+  CpuChipIcon,
+  ChartBarIcon,
+  CogIcon
 } from '@heroicons/react/24/outline';
 
 const Navbar: React.FC = () => {
-  const { user, logout } = useAuthStore();
   const { totalItems, fetchCart } = useCartStore();
   const navigate = useNavigate();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
   React.useEffect(() => {
-    if (user) {
-      fetchCart();
-    }
-  }, [user, fetchCart]);
+    fetchCart();
+  }, [fetchCart]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -32,139 +30,131 @@ const Navbar: React.FC = () => {
     }
   };
 
-  const handleLogout = () => {
-    logout();
-    navigate('/');
-  };
-
   return (
-    <nav className="bg-white shadow-lg border-b border-gray-200">
+    <nav className="bg-dark-800 shadow-lg border-b border-dark-700 sticky top-0 z-40">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
           {/* Logo */}
-          <div className="flex items-center">
-            <Link to="/" className="flex items-center space-x-2">
-              <CpuChipIcon className="h-8 w-8 text-primary-600" />
-              <span className="text-xl font-bold text-gray-900">
-                AI Commerce
-              </span>
+          <Link to="/" className="flex items-center space-x-2">
+            <CpuChipIcon className="h-8 w-8 text-primary-600" />
+            <span className="text-xl font-bold text-gray-100">
+              AI Commerce
+            </span>
+          </Link>
+
+          {/* Desktop Navigation */}
+          <div className="hidden md:flex items-center space-x-8">
+            <Link
+              to="/"
+              className="text-gray-300 hover:text-primary-400 font-medium transition-colors"
+            >
+              Home
             </Link>
-          </div>
-
-          {/* Search Bar - Desktop */}
-          <div className="hidden md:flex flex-1 max-w-lg mx-8">
-            <form onSubmit={handleSearch} className="w-full">
-              <div className="relative">
-                <input
-                  type="text"
-                  placeholder="Search products..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                />
-                <MagnifyingGlassIcon className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
-              </div>
-            </form>
-          </div>
-
-          {/* Navigation Links - Desktop */}
-          <div className="hidden md:flex items-center space-x-6">
             <Link
               to="/products"
-              className="text-gray-700 hover:text-primary-600 font-medium transition-colors"
+              className="text-gray-300 hover:text-primary-400 font-medium transition-colors"
             >
               Products
             </Link>
 
-            {user ? (
-              <>
-                {/* Cart */}
-                <Link
-                  to="/cart"
-                  className="relative p-2 text-gray-700 hover:text-primary-600 transition-colors"
-                >
-                  <ShoppingCartIcon className="h-6 w-6" />
-                  {totalItems > 0 && (
-                    <span className="absolute -top-1 -right-1 bg-primary-600 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
-                      {totalItems > 99 ? '99+' : totalItems}
-                    </span>
-                  )}
-                </Link>
+            {/* Search Bar */}
+            <form onSubmit={handleSearch} className="relative">
+              <input
+                type="text"
+                placeholder="Search products..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-64 pl-10 pr-4 py-2 bg-dark-700 border border-dark-600 text-gray-100 placeholder-gray-400 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+              />
+              <MagnifyingGlassIcon className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
+            </form>
+          </div>
 
-                {/* User Menu */}
-                <div className="relative group">
-                  <button className="flex items-center space-x-1 text-gray-700 hover:text-primary-600 transition-colors">
-                    <UserIcon className="h-6 w-6" />
-                    <span className="font-medium">{user.first_name}</span>
-                  </button>
+          {/* Right Side Navigation */}
+          <div className="hidden md:flex items-center space-x-4">
+            {/* Cart Icon */}
+            <Link
+              to="/cart"
+              className="relative p-2 text-gray-300 hover:text-primary-400 transition-colors"
+            >
+              <ShoppingCartIcon className="h-6 w-6" />
+              {totalItems > 0 && (
+                <span className="absolute -top-1 -right-1 bg-primary-600 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
+                  {totalItems > 99 ? '99+' : totalItems}
+                </span>
+              )}
+            </Link>
 
-                  {/* Dropdown */}
-                  <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">
-                    <div className="py-1">
-                      <Link
-                        to="/profile"
-                        className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                      >
-                        Profile
-                      </Link>
-                      <Link
-                        to="/orders"
-                        className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                      >
-                        Orders
-                      </Link>
-                      {user.is_admin && (
-                        <>
-                          <hr className="my-1" />
-                          <Link
-                            to="/admin"
-                            className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                          >
-                            Admin Dashboard
-                          </Link>
-                          <Link
-                            to="/admin/agents"
-                            className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center space-x-2"
-                          >
-                            <CpuChipIcon className="h-4 w-4" />
-                            <span>AI Agents</span>
-                          </Link>
-                        </>
-                      )}
-                      <hr className="my-1" />
-                      <button
-                        onClick={handleLogout}
-                        className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                      >
-                        Logout
-                      </button>
-                    </div>
+            {/* Demo Navigation Menu */}
+            <div className="relative group">
+              <button className="flex items-center space-x-1 text-gray-300 hover:text-primary-400 transition-colors">
+                <CogIcon className="h-6 w-6" />
+                <span className="font-medium">Demo</span>
+              </button>
+
+              {/* Dropdown */}
+              <div className="absolute right-0 mt-2 w-48 bg-dark-800 border border-dark-700 rounded-md shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">
+                <div className="py-1">
+                  <Link
+                    to="/profile"
+                    className="block px-4 py-2 text-sm text-gray-300 hover:bg-dark-700 flex items-center space-x-2"
+                  >
+                    <UserIcon className="h-4 w-4" />
+                    <span>Profile</span>
+                  </Link>
+                  <Link
+                    to="/orders"
+                    className="block px-4 py-2 text-sm text-gray-300 hover:bg-dark-700"
+                  >
+                    Orders
+                  </Link>
+                  <hr className="my-1 border-dark-600" />
+                  <Link
+                    to="/admin"
+                    className="block px-4 py-2 text-sm text-gray-300 hover:bg-dark-700 flex items-center space-x-2"
+                  >
+                    <ChartBarIcon className="h-4 w-4" />
+                    <span>Admin Dashboard</span>
+                  </Link>
+                  <Link
+                    to="/admin/agents"
+                    className="block px-4 py-2 text-sm text-gray-300 hover:bg-dark-700 flex items-center space-x-2"
+                  >
+                    <CpuChipIcon className="h-4 w-4" />
+                    <span>AI Agents</span>
+                  </Link>
+                  <Link
+                    to="/admin/analytics"
+                    className="block px-4 py-2 text-sm text-gray-300 hover:bg-dark-700"
+                  >
+                    Analytics
+                  </Link>
+                  <hr className="my-1 border-dark-600" />
+                  <div className="px-4 py-2 text-xs font-semibold text-gray-400 uppercase tracking-wide">
+                    AI Demos
                   </div>
+                  <Link
+                    to="/admin/pricing-demo"
+                    className="block px-4 py-2 text-sm text-gray-300 hover:bg-dark-700"
+                  >
+                    🎯 Dynamic Pricing
+                  </Link>
+                  <Link
+                    to="/admin/recommendations"
+                    className="block px-4 py-2 text-sm text-gray-300 hover:bg-dark-700"
+                  >
+                    ✨ Recommendations
+                  </Link>
                 </div>
-              </>
-            ) : (
-              <div className="flex items-center space-x-4">
-                <Link
-                  to="/login"
-                  className="text-gray-700 hover:text-primary-600 font-medium transition-colors"
-                >
-                  Login
-                </Link>
-                <Link
-                  to="/register"
-                  className="btn-primary"
-                >
-                  Sign Up
-                </Link>
               </div>
-            )}
+            </div>
           </div>
 
           {/* Mobile menu button */}
           <div className="md:hidden">
             <button
               onClick={() => setIsMenuOpen(!isMenuOpen)}
-              className="p-2 rounded-md text-gray-700 hover:text-primary-600 transition-colors"
+              className="p-2 rounded-md text-gray-300 hover:text-primary-400 transition-colors"
             >
               {isMenuOpen ? (
                 <XMarkIcon className="h-6 w-6" />
@@ -177,7 +167,7 @@ const Navbar: React.FC = () => {
 
         {/* Mobile Menu */}
         {isMenuOpen && (
-          <div className="md:hidden border-t border-gray-200">
+          <div className="md:hidden border-t border-dark-700">
             <div className="px-2 pt-2 pb-3 space-y-1">
               {/* Mobile Search */}
               <form onSubmit={handleSearch} className="mb-4">
@@ -187,91 +177,80 @@ const Navbar: React.FC = () => {
                     placeholder="Search products..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                    className="w-full pl-10 pr-4 py-2 bg-dark-700 border border-dark-600 text-gray-100 placeholder-gray-400 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                   />
                   <MagnifyingGlassIcon className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
                 </div>
               </form>
 
+              {/* Mobile Navigation Links */}
+              <Link
+                to="/"
+                className="block px-3 py-2 text-base font-medium text-gray-300 hover:text-primary-400 hover:bg-dark-700 rounded-md"
+                onClick={() => setIsMenuOpen(false)}
+              >
+                Home
+              </Link>
               <Link
                 to="/products"
-                className="block px-3 py-2 text-gray-700 hover:text-primary-600 font-medium"
+                className="block px-3 py-2 text-base font-medium text-gray-300 hover:text-primary-400 hover:bg-dark-700 rounded-md"
                 onClick={() => setIsMenuOpen(false)}
               >
                 Products
               </Link>
-
-              {user ? (
-                <>
-                  <Link
-                    to="/cart"
-                    className="flex items-center px-3 py-2 text-gray-700 hover:text-primary-600 font-medium"
-                    onClick={() => setIsMenuOpen(false)}
-                  >
-                    <ShoppingCartIcon className="h-5 w-5 mr-2" />
-                    Cart {totalItems > 0 && `(${totalItems})`}
-                  </Link>
-                  <Link
-                    to="/profile"
-                    className="block px-3 py-2 text-gray-700 hover:text-primary-600 font-medium"
-                    onClick={() => setIsMenuOpen(false)}
-                  >
-                    Profile
-                  </Link>
-                  <Link
-                    to="/orders"
-                    className="block px-3 py-2 text-gray-700 hover:text-primary-600 font-medium"
-                    onClick={() => setIsMenuOpen(false)}
-                  >
-                    Orders
-                  </Link>
-                  {user.is_admin && (
-                    <>
-                      <Link
-                        to="/admin"
-                        className="block px-3 py-2 text-gray-700 hover:text-primary-600 font-medium"
-                        onClick={() => setIsMenuOpen(false)}
-                      >
-                        Admin Dashboard
-                      </Link>
-                      <Link
-                        to="/admin/agents"
-                        className="flex items-center px-3 py-2 text-gray-700 hover:text-primary-600 font-medium"
-                        onClick={() => setIsMenuOpen(false)}
-                      >
-                        <CpuChipIcon className="h-5 w-5 mr-2" />
-                        AI Agents
-                      </Link>
-                    </>
-                  )}
-                  <button
-                    onClick={() => {
-                      handleLogout();
-                      setIsMenuOpen(false);
-                    }}
-                    className="block w-full text-left px-3 py-2 text-gray-700 hover:text-primary-600 font-medium"
-                  >
-                    Logout
-                  </button>
-                </>
-              ) : (
-                <>
-                  <Link
-                    to="/login"
-                    className="block px-3 py-2 text-gray-700 hover:text-primary-600 font-medium"
-                    onClick={() => setIsMenuOpen(false)}
-                  >
-                    Login
-                  </Link>
-                  <Link
-                    to="/register"
-                    className="block px-3 py-2 text-primary-600 hover:text-primary-700 font-medium"
-                    onClick={() => setIsMenuOpen(false)}
-                  >
-                    Sign Up
-                  </Link>
-                </>
-              )}
+              <Link
+                to="/cart"
+                className="block px-3 py-2 text-base font-medium text-gray-300 hover:text-primary-400 hover:bg-dark-700 rounded-md flex items-center justify-between"
+                onClick={() => setIsMenuOpen(false)}
+              >
+                <span>Cart</span>
+                {totalItems > 0 && (
+                  <span className="bg-primary-600 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
+                    {totalItems > 99 ? '99+' : totalItems}
+                  </span>
+                )}
+              </Link>
+              
+              <hr className="my-2" />
+              <div className="px-3 py-2 text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                Demo Pages
+              </div>
+              
+              <Link
+                to="/profile"
+                className="block px-3 py-2 text-base font-medium text-gray-300 hover:text-primary-400 hover:bg-dark-700 rounded-md"
+                onClick={() => setIsMenuOpen(false)}
+              >
+                Profile
+              </Link>
+              <Link
+                to="/orders"
+                className="block px-3 py-2 text-base font-medium text-gray-300 hover:text-primary-400 hover:bg-dark-700 rounded-md"
+                onClick={() => setIsMenuOpen(false)}
+              >
+                Orders
+              </Link>
+              <Link
+                to="/admin"
+                className="block px-3 py-2 text-base font-medium text-gray-300 hover:text-primary-400 hover:bg-dark-700 rounded-md"
+                onClick={() => setIsMenuOpen(false)}
+              >
+                Admin Dashboard
+              </Link>
+              <Link
+                to="/admin/agents"
+                className="block px-3 py-2 text-base font-medium text-gray-300 hover:text-primary-400 hover:bg-dark-700 rounded-md"
+                onClick={() => setIsMenuOpen(false)}
+              >
+                AI Agents
+              </Link>
+              <Link
+                to="/admin/analytics"
+                className="block px-3 py-2 text-base font-medium text-gray-300 hover:text-primary-400 hover:bg-dark-700 rounded-md"
+                onClick={() => setIsMenuOpen(false)}
+              >
+                Analytics
+              </Link>
             </div>
           </div>
         )}

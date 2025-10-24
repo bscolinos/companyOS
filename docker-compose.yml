@@ -1,24 +1,6 @@
 version: '3.8'
 
 services:
-  # SingleStore Database
-  singlestore:
-    image: singlestore/cluster-in-a-box:latest
-    container_name: singlestore-db
-    ports:
-      - "3306:3306"
-      - "8080:8080"
-    environment:
-      - SINGLESTORE_LICENSE=BGY4YjY2ZGE3NzYwNDNmNGI4ZGE0Yzk4YjBiMGY0YTNhAAAAAAAAAAAEAAAAAAAAACgwNQIYRm9yIGVkdWNhdGlvbmFsIHB1cnBvc2VzIG9ubHkCGQDvr2VdvbR1vt6KhLGIJLx7vJjCbkELAAAA
-    volumes:
-      - singlestore_data:/var/lib/singlestore
-    healthcheck:
-      test: ["CMD", "mysql", "-h", "localhost", "-P", "3306", "-u", "root", "-e", "SELECT 1"]
-      timeout: 20s
-      retries: 10
-    networks:
-      - ai-commerce-network
-
   # FastAPI Backend
   backend:
     build:
@@ -28,19 +10,16 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - SINGLESTORE_HOST=singlestore
-      - SINGLESTORE_PORT=3306
-      - SINGLESTORE_USER=root
-      - SINGLESTORE_PASSWORD=
-      - SINGLESTORE_DATABASE=ecommerce_ai
-      - SECRET_KEY=your-secret-key-change-in-production
+      - SINGLESTORE_HOST=${SINGLESTORE_HOST}
+      - SINGLESTORE_PORT=${SINGLESTORE_PORT:-3306}
+      - SINGLESTORE_USER=${SINGLESTORE_USER}
+      - SINGLESTORE_PASSWORD=${SINGLESTORE_PASSWORD}
+      - SINGLESTORE_DATABASE=${SINGLESTORE_DATABASE:-ecommerce_ai}
+      - SECRET_KEY=${SECRET_KEY:-your-secret-key-change-in-production}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - ENABLE_AUTO_PRICING=true
       - ENABLE_AUTO_INVENTORY=true
       - ENABLE_AUTO_RECOMMENDATIONS=true
-    depends_on:
-      singlestore:
-        condition: service_healthy
     volumes:
       - ./backend:/app
     networks:
@@ -86,9 +65,6 @@ services:
     restart: unless-stopped
     profiles:
       - production
-
-volumes:
-  singlestore_data:
 
 networks:
   ai-commerce-network:

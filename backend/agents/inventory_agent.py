@@ -3,11 +3,11 @@ import asyncio
 import logging
 from datetime import datetime, timedelta
 from openai import AsyncOpenAI
-from backend.agents.base_agent import BaseAgent
-from backend.database.connection import get_db_connection
-from backend.database.models import Product, InventoryLog
-from backend.database.operations import ProductOperations, OrderOperations, InventoryLogOperations
-from backend.config import settings
+from agents.base_agent import BaseAgent
+from database.connection import get_db_connection
+from database.models import Product, InventoryLog
+from database.operations import ProductOperations, OrderOperations, InventoryLogOperations
+from config import settings
 import json
 import numpy as np
 

@@ -1,14 +1,12 @@
 from fastapi import APIRouter, HTTPException, Depends, Query
 from pydantic import BaseModel
-from sqlalchemy.orm import Session
-from sqlalchemy import and_, desc
 from typing import List, Optional, Dict, Any
 import logging
 from datetime import datetime
 import uuid
-from backend.database.connection import get_database
-from backend.database.models import Order, OrderItem, Product, User, CartItem
-from backend.api.auth import get_current_active_user
+from database.connection import get_database
+from database.models import Order, OrderItem, Product, User, CartItem
+from api.auth import get_current_active_user
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -55,7 +53,7 @@ class OrderUpdate(BaseModel):
     tracking_number: Optional[str] = None
     payment_status: Optional[str] = None
 
-def calculate_order_totals(items: List[OrderItemCreate], db: Session) -> Dict[str, float]:
+def calculate_order_totals(items: List[OrderItemCreate], db) -> Dict[str, float]:
     """Calculate order totals"""
     subtotal = 0.0
     
@@ -90,8 +88,8 @@ def calculate_order_totals(items: List[OrderItemCreate], db: Session) -> Dict[st
 @router.post("/", response_model=OrderResponse)
 async def create_order(
     order_data: OrderCreate,
-    current_user: User = Depends(get_current_active_user),
-    db: Session = Depends(get_database)
+    # current_user removed - no auth needed for simulation
+    db = Depends(get_database)
 ):
     """Create a new order"""
     try:
@@ -191,8 +189,8 @@ async def get_user_orders(
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=100),
     status: Optional[str] = None,
-    current_user: User = Depends(get_current_active_user),
-    db: Session = Depends(get_database)
+    # current_user removed - no auth needed for simulation
+    db = Depends(get_database)
 ):
     """Get user's orders"""
     try:
@@ -246,8 +244,8 @@ async def get_user_orders(
 @router.get("/{order_id}", response_model=OrderResponse)
 async def get_order(
     order_id: int,
-    current_user: User = Depends(get_current_active_user),
-    db: Session = Depends(get_database)
+    # current_user removed - no auth needed for simulation
+    db = Depends(get_database)
 ):
     """Get a specific order"""
     try:
@@ -300,8 +298,8 @@ async def get_order(
 async def update_order(
     order_id: int,
     order_data: OrderUpdate,
-    current_user: User = Depends(get_current_active_user),
-    db: Session = Depends(get_database)
+    # current_user removed - no auth needed for simulation
+    db = Depends(get_database)
 ):
     """Update order (admin only for most fields, users can cancel)"""
     try:
@@ -382,8 +380,8 @@ async def get_all_orders(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
     status: Optional[str] = None,
-    current_user: User = Depends(get_current_active_user),
-    db: Session = Depends(get_database)
+    # current_user removed - no auth needed for simulation
+    db = Depends(get_database)
 ):
     """Get all orders (admin only)"""
     try:

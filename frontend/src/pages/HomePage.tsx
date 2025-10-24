@@ -13,13 +13,16 @@ import {
   ClockIcon
 } from '@heroicons/react/24/outline';
 import { apiService } from '../services/api';
+import { Product } from '../types';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 
 const HomePage: React.FC = () => {
   // Fetch featured products
-  const { data: featuredProducts, isLoading: productsLoading } = useQuery({
+  const { data: featuredProducts, isLoading: productsLoading, error: productsError } = useQuery({
     queryKey: ['featured-products'],
     queryFn: () => apiService.getFeaturedProducts(),
+    retry: 1,
+    staleTime: 5 * 60 * 1000, // 5 minutes
   });
 
   // Fetch AI agent status
@@ -27,6 +30,8 @@ const HomePage: React.FC = () => {
     queryKey: ['agent-status'],
     queryFn: () => apiService.getAgentStatus(),
     refetchInterval: 30000, // Refetch every 30 seconds
+    retry: 1,
+    staleTime: 30 * 1000, // 30 seconds
   });
 
   const features = [
@@ -70,7 +75,7 @@ const HomePage: React.FC = () => {
   return (
     <div className="min-h-screen">
       {/* Hero Section */}
-      <section className="relative bg-gradient-to-br from-primary-900 via-primary-800 to-secondary-900 text-white overflow-hidden">
+      <section className="relative bg-gradient-to-br from-dark-950 via-dark-900 to-primary-900 text-white overflow-hidden">
         <div className="absolute inset-0 bg-black opacity-50"></div>
         <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-24 lg:py-32">
           <div className="text-center">
@@ -96,7 +101,7 @@ const HomePage: React.FC = () => {
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Link
                 to="/products"
-                className="inline-flex items-center px-8 py-4 bg-white text-primary-900 font-semibold rounded-lg shadow-lg hover:bg-gray-100 transition-all duration-200 transform hover:scale-105"
+                className="inline-flex items-center px-8 py-4 bg-primary-600 text-white font-semibold rounded-lg shadow-lg hover:bg-primary-700 transition-all duration-200 transform hover:scale-105"
               >
                 <ShoppingBagIcon className="h-5 w-5 mr-2" />
                 Shop Now
@@ -105,7 +110,7 @@ const HomePage: React.FC = () => {
               
               <Link
                 to="/admin/agents"
-                className="inline-flex items-center px-8 py-4 border-2 border-white text-white font-semibold rounded-lg hover:bg-white hover:text-primary-900 transition-all duration-200"
+                className="inline-flex items-center px-8 py-4 border-2 border-primary-400 text-primary-400 font-semibold rounded-lg hover:bg-primary-400 hover:text-dark-900 transition-all duration-200"
               >
                 <CpuChipIcon className="h-5 w-5 mr-2" />
                 View AI Agents
@@ -117,24 +122,31 @@ const HomePage: React.FC = () => {
         {/* Floating AI Status Indicators */}
         <div className="absolute bottom-8 left-8 right-8">
           <div className="flex justify-center space-x-8">
-            {agentStatus && Object.entries(agentStatus).slice(0, 4).map(([name, status]: [string, any]) => (
-              <div key={name} className="flex items-center space-x-2 text-sm">
-                <div className={`w-2 h-2 rounded-full ${status.is_active ? 'bg-green-400 animate-pulse' : 'bg-red-400'}`}></div>
-                <span className="text-gray-300">{name.replace('Agent', '')}</span>
+            {agentStatus && Object.keys(agentStatus).length > 0 ? (
+              (Object.entries(agentStatus) as [string, any][]).slice(0, 4).map(([name, status]: [string, any]) => (
+                <div key={name} className="flex items-center space-x-2 text-sm">
+                  <div className={`w-2 h-2 rounded-full ${status.is_active ? 'bg-green-400 animate-pulse' : 'bg-red-400'}`}></div>
+                  <span className="text-gray-300">{name.replace('Agent', '')}</span>
+                </div>
+              ))
+            ) : (
+              <div className="flex items-center space-x-2 text-sm">
+                <div className="w-2 h-2 rounded-full bg-gray-400"></div>
+                <span className="text-gray-300">AI Agents Initializing...</span>
               </div>
-            ))}
+            )}
           </div>
         </div>
       </section>
 
       {/* Features Section */}
-      <section className="py-20 bg-white">
+      <section className="py-20 bg-dark-850">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-16">
-            <h2 className="text-3xl lg:text-4xl font-bold text-gray-900 mb-4">
+            <h2 className="text-3xl lg:text-4xl font-bold text-gray-100 mb-4">
               Powered by Intelligent Agents
             </h2>
-            <p className="text-xl text-gray-600 max-w-3xl mx-auto">
+            <p className="text-xl text-gray-400 max-w-3xl mx-auto">
               Our AI agents work 24/7 to optimize every aspect of your shopping experience
             </p>
           </div>
@@ -145,10 +157,10 @@ const HomePage: React.FC = () => {
                 <div className={`inline-flex items-center justify-center w-16 h-16 ${feature.bgColor} rounded-full mb-6 group-hover:scale-110 transition-transform duration-200`}>
                   <feature.icon className={`h-8 w-8 ${feature.color}`} />
                 </div>
-                <h3 className="text-xl font-semibold text-gray-900 mb-3">
+                <h3 className="text-xl font-semibold text-gray-100 mb-3">
                   {feature.title}
                 </h3>
-                <p className="text-gray-600">
+                <p className="text-gray-400">
                   {feature.description}
                 </p>
               </div>
@@ -158,7 +170,7 @@ const HomePage: React.FC = () => {
       </section>
 
       {/* Stats Section */}
-      <section className="py-16 bg-gray-50">
+      <section className="py-16 bg-dark-800">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-8">
             {stats.map((stat, index) => (
@@ -166,10 +178,10 @@ const HomePage: React.FC = () => {
                 <div className="inline-flex items-center justify-center w-12 h-12 bg-primary-100 rounded-full mb-4">
                   <stat.icon className="h-6 w-6 text-primary-600" />
                 </div>
-                <div className="text-3xl font-bold text-gray-900 mb-2">
+                <div className="text-3xl font-bold text-gray-100 mb-2">
                   {stat.value}
                 </div>
-                <div className="text-gray-600">
+                <div className="text-gray-400">
                   {stat.label}
                 </div>
               </div>
@@ -179,14 +191,14 @@ const HomePage: React.FC = () => {
       </section>
 
       {/* Featured Products */}
-      <section className="py-20 bg-white">
+      <section className="py-20 bg-dark-900">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center mb-12">
             <div>
-              <h2 className="text-3xl font-bold text-gray-900 mb-2">
+              <h2 className="text-3xl font-bold text-gray-100 mb-2">
                 Featured Products
               </h2>
-              <p className="text-gray-600">
+              <p className="text-gray-400">
                 AI-curated selection based on demand and trends
               </p>
             </div>
@@ -202,9 +214,15 @@ const HomePage: React.FC = () => {
             <div className="flex justify-center py-12">
               <LoadingSpinner size="lg" />
             </div>
-          ) : (
+          ) : productsError ? (
+            <div className="text-center py-12">
+              <ShoppingBagIcon className="h-16 w-16 text-gray-300 mx-auto mb-4" />
+              <h3 className="text-lg font-semibold text-gray-100 mb-2">Products Coming Soon</h3>
+              <p className="text-gray-400">We're setting up our AI-powered product catalog.</p>
+            </div>
+          ) : featuredProducts && featuredProducts.length > 0 ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-              {featuredProducts?.slice(0, 4).map((product: any) => (
+              {(featuredProducts as Product[]).slice(0, 4).map((product: Product) => (
                 <Link
                   key={product.id}
                   to={`/products/${product.id}`}
@@ -224,13 +242,13 @@ const HomePage: React.FC = () => {
                     )}
                   </div>
                   
-                  <h3 className="font-semibold text-gray-900 mb-2 group-hover:text-primary-600 transition-colors">
+                  <h3 className="font-semibold text-gray-100 mb-2 group-hover:text-primary-400 transition-colors">
                     {product.name}
                   </h3>
                   
                   <div className="flex items-center justify-between">
                     <span className="text-2xl font-bold text-primary-600">
-                      ${product.current_price}
+                      ${product.price}
                     </span>
                     <div className="flex items-center space-x-1 text-sm text-gray-500">
                       <SparklesIcon className="h-4 w-4" />
@@ -240,23 +258,29 @@ const HomePage: React.FC = () => {
                 </Link>
               ))}
             </div>
+          ) : (
+            <div className="text-center py-12">
+              <ShoppingBagIcon className="h-16 w-16 text-gray-300 mx-auto mb-4" />
+              <h3 className="text-lg font-semibold text-gray-100 mb-2">No Products Available</h3>
+              <p className="text-gray-400">Check back soon for amazing AI-optimized products!</p>
+            </div>
           )}
         </div>
       </section>
 
       {/* CTA Section */}
-      <section className="py-20 bg-gradient-to-r from-primary-600 to-secondary-600 text-white">
+      <section className="py-20 bg-gradient-to-r from-primary-700 to-secondary-700 text-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <CpuChipIcon className="h-16 w-16 mx-auto mb-6 animate-pulse" />
           <h2 className="text-3xl lg:text-4xl font-bold mb-4">
             Ready to Experience AI Commerce?
           </h2>
-          <p className="text-xl text-blue-100 mb-8 max-w-2xl mx-auto">
+          <p className="text-xl text-purple-100 mb-8 max-w-2xl mx-auto">
             Join the future of ecommerce with intelligent automation and personalized experiences.
           </p>
           <Link
             to="/register"
-            className="inline-flex items-center px-8 py-4 bg-white text-primary-600 font-semibold rounded-lg shadow-lg hover:bg-gray-100 transition-all duration-200 transform hover:scale-105"
+            className="inline-flex items-center px-8 py-4 bg-white text-primary-700 font-semibold rounded-lg shadow-lg hover:bg-gray-100 transition-all duration-200 transform hover:scale-105"
           >
             Get Started Today
             <ArrowRightIcon className="h-5 w-5 ml-2" />

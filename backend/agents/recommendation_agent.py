@@ -4,9 +4,11 @@ import logging
 from datetime import datetime, timedelta
 from openai import AsyncOpenAI
 import numpy as np
-from backend.agents.base_agent import BaseAgent
-from backend.database.connection import get_db_connection
-from backend.config import settings
+from agents.base_agent import BaseAgent
+from database.connection import get_db_connection
+from database.models import User, Product, Order, OrderItem, CartItem, Review, Category
+from database.operations import UserOperations, ProductOperations, OrderOperations, CartOperations, DatabaseOperations
+from config import settings
 import json
 from collections import defaultdict, Counter
 
@@ -105,20 +107,20 @@ class RecommendationAgent(BaseAgent):
     async def _generate_user_recommendations(self, conn, user_id: int, limit: int = 10) -> Dict[str, Any]:
         """Generate personalized recommendations for a user"""
         try:
-            user = db.query(User).filter(User.id == user_id).first()
+            user = UserOperations.get_user_by_id(conn, user_id)
             if not user:
                 return {"user_id": user_id, "recommendations": [], "error": "User not found"}
             
             # Get user's purchase history
-            user_orders = await self._get_user_purchase_history(db, user_id)
+            user_orders = await self._get_user_purchase_history(conn, user_id)
             
             # Get user's browsing behavior (cart items, reviews)
-            user_behavior = await self._get_user_behavior(db, user_id)
+            user_behavior = await self._get_user_behavior(conn, user_id)
             
             # Generate recommendations using multiple algorithms
-            collaborative_recs = await self._collaborative_filtering(db, user_id, user_orders)
-            content_based_recs = await self._content_based_filtering(db, user_orders, user_behavior)
-            ai_powered_recs = await self._ai_powered_recommendations(db, user_id, user_orders, user_behavior)
+            collaborative_recs = await self._collaborative_filtering(conn, user_id, user_orders)
+            content_based_recs = await self._content_based_filtering(conn, user_orders, user_behavior)
+            ai_powered_recs = await self._ai_powered_recommendations(conn, user_id, user_orders, user_behavior)
             
             # Combine and rank recommendations
             combined_recs = await self._combine_recommendations([
@@ -129,7 +131,7 @@ class RecommendationAgent(BaseAgent):
             
             # Filter and limit results
             final_recommendations = await self._filter_and_rank_recommendations(
-                db, user_id, combined_recs, limit
+                conn, user_id, combined_recs, limit
             )
             
             # Log the recommendation generation
@@ -153,21 +155,26 @@ class RecommendationAgent(BaseAgent):
             logger.error(f"Error generating recommendations for user {user_id}: {e}")
             return {"user_id": user_id, "recommendations": [], "error": str(e)}
     
-    async def _generate_batch_recommendations(self, db: Session, limit_users: int = 100) -> List[Dict[str, Any]]:
+    async def _generate_batch_recommendations(self, conn, limit_users: int = 100) -> List[Dict[str, Any]]:
         """Generate recommendations for multiple users"""
         batch_recommendations = []
         
         try:
             # Get recently active users
-            active_users = db.query(User.id).join(
-                Order, User.id == Order.user_id
-            ).filter(
-                Order.created_at >= datetime.utcnow() - timedelta(days=30)
-            ).distinct().limit(limit_users).all()
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT DISTINCT u.id 
+                FROM users u
+                JOIN orders o ON u.id = o.user_id
+                WHERE o.created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
+                LIMIT %s
+            """, (limit_users,))
             
-            for user_tuple in active_users:
-                user_id = user_tuple[0]
-                user_recs = await self._generate_user_recommendations(db, user_id, 5)
+            active_users = cursor.fetchall()
+            
+            for user_row in active_users:
+                user_id = user_row[0]
+                user_recs = await self._generate_user_recommendations(conn, user_id, 5)
                 batch_recommendations.append(user_recs)
             
         except Exception as e:
@@ -175,30 +182,27 @@ class RecommendationAgent(BaseAgent):
         
         return batch_recommendations
     
-    async def _get_user_purchase_history(self, db: Session, user_id: int) -> List[Dict[str, Any]]:
+    async def _get_user_purchase_history(self, conn, user_id: int) -> List[Dict[str, Any]]:
         """Get user's purchase history"""
         try:
-            orders = db.query(Order).filter(
-                and_(
-                    Order.user_id == user_id,
-                    Order.status.in_(['processing', 'shipped', 'delivered'])
-                )
-            ).order_by(desc(Order.created_at)).all()
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT oi.product_id, oi.quantity, oi.unit_price, o.created_at, o.id
+                FROM order_items oi
+                JOIN orders o ON oi.order_id = o.id
+                WHERE o.user_id = %s AND o.status IN ('processing', 'shipped', 'delivered')
+                ORDER BY o.created_at DESC
+            """, (user_id,))
             
             purchase_history = []
-            for order in orders:
-                order_items = db.query(OrderItem).filter(
-                    OrderItem.order_id == order.id
-                ).all()
-                
-                for item in order_items:
-                    purchase_history.append({
-                        "product_id": item.product_id,
-                        "quantity": item.quantity,
-                        "price": float(item.unit_price),
-                        "order_date": order.created_at.isoformat(),
-                        "order_id": order.id
-                    })
+            for row in cursor.fetchall():
+                purchase_history.append({
+                    "product_id": row[0],
+                    "quantity": row[1],
+                    "price": float(row[2]),
+                    "order_date": row[3].isoformat() if row[3] else None,
+                    "order_id": row[4]
+                })
             
             return purchase_history
             
@@ -206,36 +210,44 @@ class RecommendationAgent(BaseAgent):
             logger.error(f"Error getting purchase history for user {user_id}: {e}")
             return []
     
-    async def _get_user_behavior(self, db: Session, user_id: int) -> Dict[str, Any]:
+    async def _get_user_behavior(self, conn, user_id: int) -> Dict[str, Any]:
         """Get user's browsing and interaction behavior"""
         try:
+            cursor = conn.cursor()
+            
             # Get cart items (shows interest)
-            cart_items = db.query(CartItem).filter(
-                CartItem.user_id == user_id
-            ).all()
+            cursor.execute("""
+                SELECT product_id, quantity, created_at
+                FROM cart_items
+                WHERE user_id = %s
+            """, (user_id,))
+            cart_rows = cursor.fetchall()
             
             # Get reviews (shows preferences)
-            reviews = db.query(Review).filter(
-                Review.user_id == user_id
-            ).all()
+            cursor.execute("""
+                SELECT product_id, rating, sentiment_score, created_at
+                FROM reviews
+                WHERE user_id = %s
+            """, (user_id,))
+            review_rows = cursor.fetchall()
             
             return {
                 "cart_items": [
                     {
-                        "product_id": item.product_id,
-                        "quantity": item.quantity,
-                        "added_at": item.created_at.isoformat()
+                        "product_id": row[0],
+                        "quantity": row[1],
+                        "added_at": row[2].isoformat() if row[2] else None
                     }
-                    for item in cart_items
+                    for row in cart_rows
                 ],
                 "reviews": [
                     {
-                        "product_id": review.product_id,
-                        "rating": review.rating,
-                        "sentiment_score": review.sentiment_score or 0,
-                        "created_at": review.created_at.isoformat()
+                        "product_id": row[0],
+                        "rating": row[1],
+                        "sentiment_score": row[2] or 0,
+                        "created_at": row[3].isoformat() if row[3] else None
                     }
-                    for review in reviews
+                    for row in review_rows
                 ]
             }
             
@@ -243,7 +255,7 @@ class RecommendationAgent(BaseAgent):
             logger.error(f"Error getting user behavior for user {user_id}: {e}")
             return {"cart_items": [], "reviews": []}
     
-    async def _collaborative_filtering(self, db: Session, user_id: int, user_orders: List[Dict[str, Any]]) -> List[Tuple[int, float]]:
+    async def _collaborative_filtering(self, conn, user_id: int, user_orders: List[Dict[str, Any]]) -> List[Tuple[int, float]]:
         """Collaborative filtering recommendations"""
         try:
             if not user_orders:
@@ -251,57 +263,57 @@ class RecommendationAgent(BaseAgent):
             
             # Get products the user has purchased
             user_products = set(order["product_id"] for order in user_orders)
+            user_product_list = list(user_products)
+            
+            if not user_product_list:
+                return []
+            
+            cursor = conn.cursor()
             
             # Find similar users (users who bought similar products)
-            similar_users = db.query(
-                OrderItem.order_id,
-                func.count(OrderItem.product_id).label('common_products')
-            ).join(
-                Order, OrderItem.order_id == Order.id
-            ).filter(
-                and_(
-                    OrderItem.product_id.in_(user_products),
-                    Order.user_id != user_id,
-                    Order.status.in_(['processing', 'shipped', 'delivered'])
-                )
-            ).group_by(
-                OrderItem.order_id
-            ).having(
-                func.count(OrderItem.product_id) >= 2  # At least 2 common products
-            ).order_by(
-                desc('common_products')
-            ).limit(50).all()
+            placeholders = ','.join(['%s'] * len(user_product_list))
+            cursor.execute(f"""
+                SELECT oi.order_id, COUNT(oi.product_id) as common_products
+                FROM order_items oi
+                JOIN orders o ON oi.order_id = o.id
+                WHERE oi.product_id IN ({placeholders})
+                  AND o.user_id != %s
+                  AND o.status IN ('processing', 'shipped', 'delivered')
+                GROUP BY oi.order_id
+                HAVING COUNT(oi.product_id) >= 2
+                ORDER BY common_products DESC
+                LIMIT 50
+            """, user_product_list + [user_id])
             
-            # Get order IDs of similar users
-            similar_order_ids = [row.order_id for row in similar_users]
+            similar_order_ids = [row[0] for row in cursor.fetchall()]
             
             if not similar_order_ids:
                 return []
             
             # Get products bought by similar users that current user hasn't bought
-            recommended_products = db.query(
-                OrderItem.product_id,
-                func.count(OrderItem.product_id).label('frequency'),
-                func.avg(OrderItem.unit_price).label('avg_price')
-            ).filter(
-                and_(
-                    OrderItem.order_id.in_(similar_order_ids),
-                    ~OrderItem.product_id.in_(user_products)
-                )
-            ).group_by(
-                OrderItem.product_id
-            ).order_by(
-                desc('frequency')
-            ).limit(20).all()
+            order_placeholders = ','.join(['%s'] * len(similar_order_ids))
+            product_placeholders = ','.join(['%s'] * len(user_product_list))
+            
+            cursor.execute(f"""
+                SELECT oi.product_id, COUNT(oi.product_id) as frequency, AVG(oi.unit_price) as avg_price
+                FROM order_items oi
+                WHERE oi.order_id IN ({order_placeholders})
+                  AND oi.product_id NOT IN ({product_placeholders})
+                GROUP BY oi.product_id
+                ORDER BY frequency DESC
+                LIMIT 20
+            """, similar_order_ids + user_product_list)
+            
+            recommended_products = cursor.fetchall()
             
             # Calculate recommendation scores
             recommendations = []
-            max_frequency = max([prod.frequency for prod in recommended_products], default=1)
+            max_frequency = max([prod[1] for prod in recommended_products], default=1)
             
             for product in recommended_products:
                 # Score based on frequency among similar users
-                score = product.frequency / max_frequency
-                recommendations.append((product.product_id, score))
+                score = product[1] / max_frequency
+                recommendations.append((product[0], score))
             
             return recommendations
             
@@ -309,7 +321,7 @@ class RecommendationAgent(BaseAgent):
             logger.error(f"Error in collaborative filtering: {e}")
             return []
     
-    async def _content_based_filtering(self, db: Session, user_orders: List[Dict[str, Any]], user_behavior: Dict[str, Any]) -> List[Tuple[int, float]]:
+    async def _content_based_filtering(self, conn, user_orders: List[Dict[str, Any]], user_behavior: Dict[str, Any]) -> List[Tuple[int, float]]:
         """Content-based filtering recommendations"""
         try:
             if not user_orders and not user_behavior["cart_items"]:
@@ -329,58 +341,86 @@ class RecommendationAgent(BaseAgent):
             if not interested_product_ids:
                 return []
             
+            cursor = conn.cursor()
+            
             # Get products user has interacted with
-            interested_products = db.query(Product).filter(
-                Product.id.in_(interested_product_ids)
-            ).all()
+            interested_product_list = list(interested_product_ids)
+            placeholders = ','.join(['%s'] * len(interested_product_list))
+            cursor.execute(f"""
+                SELECT id, category_id, tags, current_price
+                FROM products
+                WHERE id IN ({placeholders})
+            """, interested_product_list)
+            
+            interested_products = cursor.fetchall()
             
             # Extract categories and tags
             preferred_categories = set()
             preferred_tags = set()
             
             for product in interested_products:
-                if product.category_id:
-                    preferred_categories.add(product.category_id)
+                if product[1]:  # category_id
+                    preferred_categories.add(product[1])
                 
-                if product.tags:
-                    preferred_tags.update(product.tags)
+                if product[2]:  # tags
+                    tags = DatabaseOperations.json_to_list(product[2]) if isinstance(product[2], str) else product[2]
+                    if tags:
+                        preferred_tags.update(tags)
             
             # Find similar products
-            similar_products = db.query(Product).filter(
-                and_(
-                    Product.is_active == True,
-                    ~Product.id.in_(interested_product_ids),
-                    or_(
-                        Product.category_id.in_(preferred_categories) if preferred_categories else False,
-                        # Could add tag matching here if needed
-                    )
-                )
-            ).limit(30).all()
+            category_conditions = []
+            params = []
+            
+            if preferred_categories:
+                category_placeholders = ','.join(['%s'] * len(preferred_categories))
+                category_conditions.append(f"category_id IN ({category_placeholders})")
+                params.extend(list(preferred_categories))
+            
+            # Exclude already interacted products
+            product_placeholders = ','.join(['%s'] * len(interested_product_list))
+            params.extend(interested_product_list)
+            
+            where_clause = " OR ".join(category_conditions) if category_conditions else "1=0"
+            
+            cursor.execute(f"""
+                SELECT id, category_id, tags, current_price
+                FROM products
+                WHERE is_active = 1 
+                  AND id NOT IN ({product_placeholders})
+                  AND ({where_clause})
+                LIMIT 30
+            """, params)
+            
+            similar_products = cursor.fetchall()
             
             # Calculate similarity scores
             recommendations = []
+            user_avg_price = sum(order["price"] for order in user_orders) / len(user_orders) if user_orders else 0
+            
             for product in similar_products:
                 score = 0.0
+                product_id, category_id, tags_json, current_price = product
                 
                 # Category similarity
-                if product.category_id in preferred_categories:
+                if category_id in preferred_categories:
                     score += 0.7
                 
-                # Tag similarity (if implemented)
-                if product.tags and preferred_tags:
-                    common_tags = set(product.tags) & preferred_tags
-                    if common_tags:
-                        score += 0.3 * (len(common_tags) / len(preferred_tags))
+                # Tag similarity
+                if tags_json and preferred_tags:
+                    product_tags = DatabaseOperations.json_to_list(tags_json) if isinstance(tags_json, str) else tags_json
+                    if product_tags:
+                        common_tags = set(product_tags) & preferred_tags
+                        if common_tags:
+                            score += 0.3 * (len(common_tags) / len(preferred_tags))
                 
                 # Price range similarity
-                user_avg_price = sum(order["price"] for order in user_orders) / len(user_orders) if user_orders else 0
                 if user_avg_price > 0:
-                    price_diff = abs(float(product.current_price) - user_avg_price) / user_avg_price
+                    price_diff = abs(float(current_price) - user_avg_price) / user_avg_price
                     if price_diff < 0.5:  # Within 50% of average price
                         score += 0.2
                 
                 if score > self.min_recommendation_score:
-                    recommendations.append((product.id, score))
+                    recommendations.append((product_id, score))
             
             return sorted(recommendations, key=lambda x: x[1], reverse=True)
             
@@ -388,23 +428,30 @@ class RecommendationAgent(BaseAgent):
             logger.error(f"Error in content-based filtering: {e}")
             return []
     
-    async def _ai_powered_recommendations(self, db: Session, user_id: int, user_orders: List[Dict[str, Any]], user_behavior: Dict[str, Any]) -> List[Tuple[int, float]]:
+    async def _ai_powered_recommendations(self, conn, user_id: int, user_orders: List[Dict[str, Any]], user_behavior: Dict[str, Any]) -> List[Tuple[int, float]]:
         """AI-powered recommendations using OpenAI"""
         try:
             if not self.openai_client:
                 return []
             
             # Get user profile
-            user = db.query(User).filter(User.id == user_id).first()
+            user = UserOperations.get_user_by_id(conn, user_id)
             if not user:
                 return []
             
+            cursor = conn.cursor()
+            
             # Get top products for recommendation
-            top_products = db.query(Product).filter(
-                Product.is_active == True
-            ).order_by(
-                desc(Product.demand_score)
-            ).limit(50).all()
+            cursor.execute("""
+                SELECT p.id, p.name, p.current_price, p.demand_score, p.tags, c.name as category_name
+                FROM products p
+                LEFT JOIN categories c ON p.category_id = c.id
+                WHERE p.is_active = 1
+                ORDER BY p.demand_score DESC
+                LIMIT 50
+            """)
+            
+            top_products = cursor.fetchall()
             
             # Prepare context for AI
             user_context = {
@@ -413,17 +460,19 @@ class RecommendationAgent(BaseAgent):
                 "reviews": user_behavior["reviews"][-5:],  # Last 5 reviews
             }
             
-            products_context = [
-                {
-                    "id": product.id,
-                    "name": product.name,
-                    "price": float(product.current_price),
-                    "category": product.category.name if product.category else "Unknown",
-                    "demand_score": product.demand_score,
-                    "tags": product.tags or []
-                }
-                for product in top_products[:20]  # Limit for AI processing
-            ]
+            products_context = []
+            for product in top_products[:20]:  # Limit for AI processing
+                product_id, name, current_price, demand_score, tags_json, category_name = product
+                tags = DatabaseOperations.json_to_list(tags_json) if tags_json else []
+                
+                products_context.append({
+                    "id": product_id,
+                    "name": name,
+                    "price": float(current_price),
+                    "category": category_name or "Unknown",
+                    "demand_score": demand_score,
+                    "tags": tags
+                })
             
             prompt = f"""
             Analyze the user's behavior and recommend products from the available list.
@@ -501,7 +550,7 @@ class RecommendationAgent(BaseAgent):
             logger.error(f"Error combining recommendations: {e}")
             return []
     
-    async def _filter_and_rank_recommendations(self, db: Session, user_id: int, recommendations: List[Tuple[int, float]], limit: int) -> List[Dict[str, Any]]:
+    async def _filter_and_rank_recommendations(self, conn, user_id: int, recommendations: List[Tuple[int, float]], limit: int) -> List[Dict[str, Any]]:
         """Filter and rank final recommendations"""
         try:
             if not recommendations:
@@ -509,16 +558,39 @@ class RecommendationAgent(BaseAgent):
             
             # Get product details
             product_ids = [rec[0] for rec in recommendations[:limit * 2]]  # Get more to filter
-            products = db.query(Product).filter(
-                and_(
-                    Product.id.in_(product_ids),
-                    Product.is_active == True,
-                    Product.stock_quantity > 0  # Only recommend in-stock items
-                )
-            ).all()
+            
+            if not product_ids:
+                return []
+            
+            cursor = conn.cursor()
+            placeholders = ','.join(['%s'] * len(product_ids))
+            cursor.execute(f"""
+                SELECT p.id, p.name, p.current_price, p.stock_quantity, p.is_featured, 
+                       p.images, c.name as category_name
+                FROM products p
+                LEFT JOIN categories c ON p.category_id = c.id
+                WHERE p.id IN ({placeholders})
+                  AND p.is_active = 1
+                  AND p.stock_quantity > 0
+            """, product_ids)
+            
+            products = cursor.fetchall()
             
             # Create product lookup
-            product_lookup = {product.id: product for product in products}
+            product_lookup = {}
+            for product in products:
+                product_id, name, current_price, stock_quantity, is_featured, images_json, category_name = product
+                images = DatabaseOperations.json_to_list(images_json) if images_json else []
+                
+                product_lookup[product_id] = {
+                    "id": product_id,
+                    "name": name,
+                    "current_price": current_price,
+                    "stock_quantity": stock_quantity,
+                    "is_featured": is_featured,
+                    "images": images,
+                    "category_name": category_name
+                }
             
             # Filter and format recommendations
             final_recommendations = []
@@ -533,14 +605,14 @@ class RecommendationAgent(BaseAgent):
                 product = product_lookup[product_id]
                 
                 final_recommendations.append({
-                    "product_id": product.id,
-                    "name": product.name,
-                    "price": float(product.current_price),
-                    "category": product.category.name if product.category else None,
+                    "product_id": product["id"],
+                    "name": product["name"],
+                    "price": float(product["current_price"]),
+                    "category": product["category_name"],
                     "recommendation_score": round(score, 3),
-                    "stock_quantity": product.stock_quantity,
-                    "is_featured": product.is_featured,
-                    "images": product.images or []
+                    "stock_quantity": product["stock_quantity"],
+                    "is_featured": product["is_featured"],
+                    "images": product["images"]
                 })
             
             return final_recommendations
@@ -549,32 +621,180 @@ class RecommendationAgent(BaseAgent):
             logger.error(f"Error filtering recommendations: {e}")
             return []
     
-    async def _identify_cross_sell_opportunities(self, db: Session) -> List[Dict[str, Any]]:
+    async def _identify_cross_sell_opportunities(self, conn) -> List[Dict[str, Any]]:
         """Identify cross-selling opportunities"""
-        # Implementation for cross-sell analysis
-        return []
+        try:
+            cursor = conn.cursor()
+            
+            # Find frequently bought together products
+            cursor.execute("""
+                SELECT 
+                    oi1.product_id as product1_id,
+                    oi2.product_id as product2_id,
+                    COUNT(*) as frequency,
+                    p1.name as product1_name,
+                    p2.name as product2_name
+                FROM order_items oi1
+                JOIN order_items oi2 ON oi1.order_id = oi2.order_id AND oi1.product_id < oi2.product_id
+                JOIN products p1 ON oi1.product_id = p1.id
+                JOIN products p2 ON oi2.product_id = p2.id
+                JOIN orders o ON oi1.order_id = o.id
+                WHERE o.status IN ('processing', 'shipped', 'delivered')
+                  AND o.created_at >= DATE_SUB(NOW(), INTERVAL 90 DAY)
+                  AND p1.is_active = 1 AND p2.is_active = 1
+                GROUP BY oi1.product_id, oi2.product_id
+                HAVING frequency >= 3
+                ORDER BY frequency DESC
+                LIMIT 50
+            """)
+            
+            cross_sell_opportunities = []
+            for row in cursor.fetchall():
+                cross_sell_opportunities.append({
+                    "product1_id": row[0],
+                    "product2_id": row[1],
+                    "frequency": row[2],
+                    "product1_name": row[3],
+                    "product2_name": row[4],
+                    "confidence": min(row[2] / 10.0, 1.0)  # Normalize confidence score
+                })
+            
+            return cross_sell_opportunities
+            
+        except Exception as e:
+            logger.error(f"Error identifying cross-sell opportunities: {e}")
+            return []
     
-    async def _update_trending_products(self, db: Session) -> List[Dict[str, Any]]:
+    async def _update_trending_products(self, conn) -> List[Dict[str, Any]]:
         """Update trending products based on recent activity"""
-        # Implementation for trending products
-        return []
+        try:
+            cursor = conn.cursor()
+            
+            # Get trending products based on recent sales
+            cursor.execute("""
+                SELECT 
+                    p.id,
+                    p.name,
+                    p.current_price,
+                    COUNT(oi.id) as recent_sales,
+                    SUM(oi.quantity) as total_quantity,
+                    AVG(r.rating) as avg_rating
+                FROM products p
+                JOIN order_items oi ON p.id = oi.product_id
+                JOIN orders o ON oi.order_id = o.id
+                LEFT JOIN reviews r ON p.id = r.product_id
+                WHERE o.created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
+                  AND o.status IN ('processing', 'shipped', 'delivered')
+                  AND p.is_active = 1
+                GROUP BY p.id
+                HAVING recent_sales >= 2
+                ORDER BY recent_sales DESC, total_quantity DESC
+                LIMIT 20
+            """)
+            
+            trending_products = []
+            for row in cursor.fetchall():
+                trending_products.append({
+                    "product_id": row[0],
+                    "name": row[1],
+                    "price": float(row[2]),
+                    "recent_sales": row[3],
+                    "total_quantity": row[4],
+                    "avg_rating": float(row[5]) if row[5] else 0,
+                    "trend_score": row[3] * (row[4] or 1)  # Sales count * quantity
+                })
+            
+            return trending_products
+            
+        except Exception as e:
+            logger.error(f"Error updating trending products: {e}")
+            return []
     
-    async def _analyze_recommendation_performance(self, db: Session) -> Dict[str, Any]:
+    async def _analyze_recommendation_performance(self, conn) -> Dict[str, Any]:
         """Analyze how well recommendations are performing"""
-        # Implementation for performance analysis
-        return {"message": "Recommendation performance analysis not implemented yet"}
+        try:
+            cursor = conn.cursor()
+            
+            # This would require tracking recommendation clicks/purchases
+            # For now, return basic metrics
+            cursor.execute("""
+                SELECT COUNT(*) as total_orders, AVG(total_amount) as avg_order_value
+                FROM orders 
+                WHERE created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
+                  AND status IN ('processing', 'shipped', 'delivered')
+            """)
+            
+            row = cursor.fetchone()
+            return {
+                "total_orders_30d": row[0] if row else 0,
+                "avg_order_value_30d": float(row[1]) if row and row[1] else 0,
+                "message": "Basic performance metrics - full recommendation tracking not implemented yet"
+            }
+            
+        except Exception as e:
+            logger.error(f"Error analyzing recommendation performance: {e}")
+            return {"error": str(e)}
     
-    async def _analyze_recommendation_accuracy(self, db: Session) -> Dict[str, Any]:
+    async def _analyze_recommendation_accuracy(self, conn) -> Dict[str, Any]:
         """Analyze recommendation accuracy"""
-        # Implementation for accuracy analysis
-        return {"message": "Recommendation accuracy analysis not implemented yet"}
+        try:
+            # This would require tracking which recommendations were clicked/purchased
+            return {"message": "Recommendation accuracy analysis requires click/purchase tracking implementation"}
+            
+        except Exception as e:
+            logger.error(f"Error analyzing recommendation accuracy: {e}")
+            return {"error": str(e)}
     
-    async def _analyze_recommendation_engagement(self, db: Session) -> Dict[str, Any]:
+    async def _analyze_recommendation_engagement(self, conn) -> Dict[str, Any]:
         """Analyze user engagement with recommendations"""
-        # Implementation for engagement analysis
-        return {"message": "Recommendation engagement analysis not implemented yet"}
+        try:
+            # This would require tracking recommendation interactions
+            return {"message": "Recommendation engagement analysis requires interaction tracking implementation"}
+            
+        except Exception as e:
+            logger.error(f"Error analyzing recommendation engagement: {e}")
+            return {"error": str(e)}
     
-    async def _analyze_product_affinity(self, db: Session) -> Dict[str, Any]:
+    async def _analyze_product_affinity(self, conn) -> Dict[str, Any]:
         """Analyze product affinity patterns"""
-        # Implementation for affinity analysis
-        return {"message": "Product affinity analysis not implemented yet"}
+        try:
+            cursor = conn.cursor()
+            
+            # Analyze category affinity
+            cursor.execute("""
+                SELECT 
+                    c1.name as category1,
+                    c2.name as category2,
+                    COUNT(*) as co_purchases
+                FROM order_items oi1
+                JOIN order_items oi2 ON oi1.order_id = oi2.order_id AND oi1.product_id != oi2.product_id
+                JOIN products p1 ON oi1.product_id = p1.id
+                JOIN products p2 ON oi2.product_id = p2.id
+                JOIN categories c1 ON p1.category_id = c1.id
+                JOIN categories c2 ON p2.category_id = c2.id
+                JOIN orders o ON oi1.order_id = o.id
+                WHERE o.status IN ('processing', 'shipped', 'delivered')
+                  AND o.created_at >= DATE_SUB(NOW(), INTERVAL 90 DAY)
+                  AND c1.id < c2.id
+                GROUP BY c1.id, c2.id
+                HAVING co_purchases >= 5
+                ORDER BY co_purchases DESC
+                LIMIT 20
+            """)
+            
+            category_affinities = []
+            for row in cursor.fetchall():
+                category_affinities.append({
+                    "category1": row[0],
+                    "category2": row[1],
+                    "co_purchases": row[2]
+                })
+            
+            return {
+                "category_affinities": category_affinities,
+                "analysis_period": "90 days"
+            }
+            
+        except Exception as e:
+            logger.error(f"Error analyzing product affinity: {e}")
+            return {"error": str(e)}

@@ -1,7 +1,7 @@
 import singlestoredb as s2
 from contextlib import contextmanager
 import logging
-from backend.config import settings
+from config import settings
 from typing import Generator
 import asyncio
 import threading
@@ -38,20 +38,35 @@ def get_connection_pool():
     return _connection_pool
 
 @contextmanager
-def get_database() -> Generator[s2.Connection, None, None]:
-    """Get a database connection from the pool"""
+def get_database():
+    """Get a new database connection"""
     conn = None
     try:
-        conn = get_connection_pool()
+        conn = s2.connect(
+            host=settings.singlestore_host,
+            port=settings.singlestore_port,
+            user=settings.singlestore_user,
+            password=settings.singlestore_password,
+            database=settings.singlestore_database,
+            autocommit=False,
+            local_infile=True,
+            charset='utf8mb4'
+        )
         yield conn
     except Exception as e:
         if conn:
-            conn.rollback()
+            try:
+                conn.rollback()
+            except:
+                pass  # Connection might already be closed
         logger.error(f"Database operation failed: {e}")
         raise
     finally:
         if conn:
-            conn.close()
+            try:
+                conn.close()
+            except:
+                pass  # Connection might already be closed
 
 def get_db_connection():
     """Get a new database connection (for use in agents)"""
@@ -80,15 +95,12 @@ def init_database():
             cursor.execute(f"CREATE DATABASE IF NOT EXISTS {settings.singlestore_database}")
             cursor.execute(f"USE {settings.singlestore_database}")
             
-            # Create tables with SingleStore-optimized DDL
+            # Create basic tables - you can add the complex schema manually later
             create_tables_sql = """
-            -- Users table
-            -- Shard key: id (auto-increment provides good distribution)
-            -- Sort key: email (frequent lookup), created_at (for admin queries)
             CREATE TABLE IF NOT EXISTS users (
                 id BIGINT AUTO_INCREMENT PRIMARY KEY,
-                email VARCHAR(255) UNIQUE NOT NULL,
-                username VARCHAR(100) UNIQUE NOT NULL,
+                email VARCHAR(255) NOT NULL,
+                username VARCHAR(100) NOT NULL,
                 hashed_password VARCHAR(255) NOT NULL,
                 first_name VARCHAR(100),
                 last_name VARCHAR(100),
@@ -98,15 +110,9 @@ def init_database():
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                 SHARD KEY (id),
-                SORT KEY (email, created_at),
-                INDEX(email) USING HASH,
-                INDEX(username) USING HASH,
-                INDEX(is_active) USING HASH
+                SORT KEY (email, created_at)
             );
 
-            -- Categories table  
-            -- Shard key: id (good distribution for small table)
-            -- Sort key: name (frequent lookups), is_active (filtering)
             CREATE TABLE IF NOT EXISTS categories (
                 id BIGINT AUTO_INCREMENT PRIMARY KEY,
                 name VARCHAR(100) NOT NULL,
@@ -115,20 +121,14 @@ def init_database():
                 is_active BOOLEAN DEFAULT TRUE,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 SHARD KEY (id),
-                SORT KEY (name, is_active),
-                INDEX(name) USING HASH,
-                INDEX(is_active) USING HASH,
-                INDEX(parent_id) USING HASH
+                SORT KEY (name, is_active)
             );
 
-            -- Products table
-            -- Shard key: id (high cardinality, good distribution) 
-            -- Sort key: is_featured, demand_score, created_at (matches ORDER BY in queries)
             CREATE TABLE IF NOT EXISTS products (
                 id BIGINT AUTO_INCREMENT PRIMARY KEY,
                 name VARCHAR(255) NOT NULL,
                 description TEXT,
-                sku VARCHAR(100) UNIQUE NOT NULL,
+                sku VARCHAR(100) NOT NULL,
                 category_id BIGINT,
                 base_price DECIMAL(10,2) NOT NULL,
                 current_price DECIMAL(10,2) NOT NULL,
@@ -148,23 +148,13 @@ def init_database():
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                 SHARD KEY (id),
-                SORT KEY (is_featured, demand_score, created_at),
-                INDEX(sku) USING HASH,
-                INDEX(category_id) USING HASH,
-                INDEX(is_active) USING HASH,
-                INDEX(is_featured) USING HASH,
-                INDEX(current_price) USING BTREE,
-                INDEX(stock_quantity) USING BTREE,
-                INDEX(name) USING HASH
+                SORT KEY (is_featured, demand_score, created_at)
             );
 
-            -- Orders table
-            -- Shard key: user_id (distributes by customer, enables efficient user queries)
-            -- Sort key: created_at (time-based queries), status (filtering)
             CREATE TABLE IF NOT EXISTS orders (
                 id BIGINT AUTO_INCREMENT,
                 user_id BIGINT NOT NULL,
-                order_number VARCHAR(50) UNIQUE NOT NULL,
+                order_number VARCHAR(50) NOT NULL,
                 status VARCHAR(50) DEFAULT 'pending',
                 total_amount DECIMAL(10,2) NOT NULL,
                 tax_amount DECIMAL(10,2) DEFAULT 0.0,
@@ -184,18 +174,10 @@ def init_database():
                 shipped_at TIMESTAMP NULL,
                 delivered_at TIMESTAMP NULL,
                 PRIMARY KEY (user_id, id),
-                SHARD KEY (user_id),
-                SORT KEY (created_at, status),
-                INDEX(id) USING HASH,
-                INDEX(order_number) USING HASH,
-                INDEX(status) USING HASH,
-                INDEX(created_at) USING BTREE,
-                INDEX(payment_status) USING HASH
+                SHARD KEY (user_id, id),
+                SORT KEY (created_at, status)
             );
 
-            -- Order Items table
-            -- Shard key: order_id (groups items with orders, enables efficient order queries)
-            -- Sort key: product_id (for product analysis)
             CREATE TABLE IF NOT EXISTS order_items (
                 id BIGINT AUTO_INCREMENT,
                 order_id BIGINT NOT NULL,
@@ -205,14 +187,9 @@ def init_database():
                 total_price DECIMAL(10,2) NOT NULL,
                 PRIMARY KEY (order_id, id),
                 SHARD KEY (order_id),
-                SORT KEY (product_id),
-                INDEX(product_id) USING HASH,
-                INDEX(id) USING HASH
+                SORT KEY (product_id)
             );
 
-            -- Cart Items table
-            -- Shard key: user_id (distributes by user, enables efficient user cart queries)
-            -- Sort key: created_at (for cart ordering)
             CREATE TABLE IF NOT EXISTS cart_items (
                 id BIGINT AUTO_INCREMENT,
                 user_id BIGINT NOT NULL,
@@ -222,14 +199,9 @@ def init_database():
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                 PRIMARY KEY (user_id, id),
                 SHARD KEY (user_id),
-                SORT KEY (created_at),
-                INDEX(product_id) USING HASH,
-                INDEX(id) USING HASH
+                SORT KEY (created_at)
             );
 
-            -- Reviews table
-            -- Shard key: product_id (distributes by product, enables efficient product review queries)
-            -- Sort key: created_at (for chronological ordering), rating (for filtering)
             CREATE TABLE IF NOT EXISTS reviews (
                 id BIGINT AUTO_INCREMENT,
                 user_id BIGINT NOT NULL,
@@ -244,16 +216,9 @@ def init_database():
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 PRIMARY KEY (product_id, id),
                 SHARD KEY (product_id),
-                SORT KEY (created_at, rating),
-                INDEX(user_id) USING HASH,
-                INDEX(rating) USING HASH,
-                INDEX(is_approved) USING HASH,
-                INDEX(id) USING HASH
+                SORT KEY (created_at, rating)
             );
 
-            -- Inventory Logs table
-            -- Shard key: product_id (distributes by product, enables efficient product history queries)
-            -- Sort key: created_at (time-series data), change_type (for filtering)
             CREATE TABLE IF NOT EXISTS inventory_logs (
                 id BIGINT AUTO_INCREMENT,
                 product_id BIGINT NOT NULL,
@@ -266,16 +231,9 @@ def init_database():
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 PRIMARY KEY (product_id, id),
                 SHARD KEY (product_id),
-                SORT KEY (created_at, change_type),
-                INDEX(change_type) USING HASH,
-                INDEX(agent_action) USING HASH,
-                INDEX(created_at) USING BTREE,
-                INDEX(id) USING HASH
+                SORT KEY (created_at, change_type)
             );
 
-            -- Price History table
-            -- Shard key: product_id (distributes by product, enables efficient product price history)
-            -- Sort key: created_at (time-series data), agent_action (for filtering)
             CREATE TABLE IF NOT EXISTS price_history (
                 id BIGINT AUTO_INCREMENT,
                 product_id BIGINT NOT NULL,
@@ -287,15 +245,9 @@ def init_database():
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 PRIMARY KEY (product_id, id),
                 SHARD KEY (product_id),
-                SORT KEY (created_at, agent_action),
-                INDEX(agent_action) USING HASH,
-                INDEX(created_at) USING BTREE,
-                INDEX(id) USING HASH
+                SORT KEY (created_at, agent_action)
             );
 
-            -- Agent Logs table
-            -- Shard key: agent_name (distributes by agent, enables efficient per-agent queries)
-            -- Sort key: created_at (time-series data), action_type (for filtering)
             CREATE TABLE IF NOT EXISTS agent_logs (
                 id BIGINT AUTO_INCREMENT,
                 agent_name VARCHAR(100) NOT NULL,
@@ -309,17 +261,9 @@ def init_database():
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 PRIMARY KEY (agent_name, id),
                 SHARD KEY (agent_name),
-                SORT KEY (created_at, action_type),
-                INDEX(action_type) USING HASH,
-                INDEX(result) USING HASH,
-                INDEX(created_at) USING BTREE,
-                INDEX(target_id) USING HASH,
-                INDEX(id) USING HASH
+                SORT KEY (created_at, action_type)
             );
 
-            -- Customer Interactions table
-            -- Shard key: user_id (distributes by customer, enables efficient user interaction queries)
-            -- Sort key: created_at (time-series data), status (for filtering)
             CREATE TABLE IF NOT EXISTS customer_interactions (
                 id BIGINT AUTO_INCREMENT,
                 user_id BIGINT,
@@ -335,13 +279,7 @@ def init_database():
                 resolved_at TIMESTAMP NULL,
                 PRIMARY KEY (user_id, id),
                 SHARD KEY (user_id),
-                SORT KEY (created_at, status),
-                INDEX(interaction_type) USING HASH,
-                INDEX(status) USING HASH,
-                INDEX(priority) USING HASH,
-                INDEX(agent_handled) USING HASH,
-                INDEX(created_at) USING BTREE,
-                INDEX(id) USING HASH
+                SORT KEY (created_at, status)
             );
             """
             
@@ -361,12 +299,14 @@ def init_database():
 def test_connection():
     """Test database connection"""
     try:
-        with get_database() as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT 1 as test")
-            result = cursor.fetchone()
-            logger.info("Database connection test successful")
-            return True
+        # Create a fresh connection for testing
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT 1 as test")
+        result = cursor.fetchone()
+        conn.close()
+        logger.info("Database connection test successful")
+        return True
     except Exception as e:
         logger.error(f"Database connection test failed: {e}")
         return False

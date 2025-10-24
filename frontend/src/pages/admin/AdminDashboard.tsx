@@ -9,6 +9,7 @@ import {
   ExclamationTriangleIcon
 } from '@heroicons/react/24/outline';
 import { apiService } from '../../services/api';
+import { DashboardAnalytics } from '../../types';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 
 const AdminDashboard: React.FC = () => {
@@ -36,29 +37,29 @@ const AdminDashboard: React.FC = () => {
   const stats = [
     {
       name: 'Total Revenue',
-      value: `$${analytics?.revenue?.total_revenue?.toLocaleString() || '0'}`,
+      value: `$${(analytics as DashboardAnalytics)?.revenue?.total_revenue?.toLocaleString() || '0'}`,
       change: '+12.5%',
       changeType: 'positive',
       icon: CurrencyDollarIcon,
     },
     {
       name: 'Total Orders',
-      value: analytics?.revenue?.total_orders?.toLocaleString() || '0',
+      value: (analytics as DashboardAnalytics)?.revenue?.total_orders?.toLocaleString() || '0',
       change: '+8.2%',
       changeType: 'positive',
       icon: ShoppingBagIcon,
     },
     {
       name: 'Total Users',
-      value: analytics?.users?.total_users?.toLocaleString() || '0',
-      change: `+${analytics?.users?.growth_rate || 0}%`,
+      value: (analytics as DashboardAnalytics)?.users?.total_users?.toLocaleString() || '0',
+      change: `+${(analytics as DashboardAnalytics)?.users?.growth_rate || 0}%`,
       changeType: 'positive',
       icon: UsersIcon,
     },
     {
       name: 'Low Stock Alerts',
-      value: analytics?.products?.low_stock_products || '0',
-      change: analytics?.products?.stock_alert_rate ? `${analytics.products.stock_alert_rate}%` : '0%',
+      value: (analytics as DashboardAnalytics)?.products?.low_stock_products || '0',
+      change: (analytics as DashboardAnalytics)?.products?.stock_alert_rate ? `${(analytics as DashboardAnalytics).products.stock_alert_rate}%` : '0%',
       changeType: 'negative',
       icon: ExclamationTriangleIcon,
     },
@@ -109,7 +110,7 @@ const AdminDashboard: React.FC = () => {
             AI Agents Status
           </h3>
           <div className="space-y-4">
-            {agentStatus && Object.entries(agentStatus).map(([name, status]: [string, any]) => (
+            {agentStatus && (Object.entries(agentStatus) as [string, any][]).map(([name, status]: [string, any]) => (
               <div key={name} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                 <div className="flex items-center space-x-3">
                   <div className={`w-3 h-3 rounded-full ${
@@ -134,7 +135,7 @@ const AdminDashboard: React.FC = () => {
             Top Selling Products
           </h3>
           <div className="space-y-4">
-            {analytics?.top_selling_products?.map((product: any, index: number) => (
+            {(analytics as DashboardAnalytics)?.top_selling_products?.map((product: any, index: number) => (
               <div key={index} className="flex items-center justify-between">
                 <div>
                   <p className="font-medium text-gray-900">{product.name}</p>
@@ -157,7 +158,7 @@ const AdminDashboard: React.FC = () => {
           AI Performance Overview
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {analytics?.ai_agents?.performance?.map((agent: any) => (
+          {(analytics as DashboardAnalytics)?.ai_agents?.performance?.map((agent: any) => (
             <div key={agent.agent_name} className="text-center p-4 bg-gray-50 rounded-lg">
               <h4 className="font-medium text-gray-900 mb-2">
                 {agent.agent_name.replace('Agent', '')}

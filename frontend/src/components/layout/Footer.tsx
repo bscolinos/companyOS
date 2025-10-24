@@ -4,7 +4,7 @@ import { CpuChipIcon } from '@heroicons/react/24/outline';
 
 const Footer: React.FC = () => {
   return (
-    <footer className="bg-gray-900 text-white">
+    <footer className="bg-dark-950 text-white">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
           {/* Logo and Description */}
@@ -92,7 +92,7 @@ const Footer: React.FC = () => {
         </div>
 
         {/* Bottom Section */}
-        <div className="border-t border-gray-800 mt-8 pt-8 flex flex-col md:flex-row justify-between items-center">
+        <div className="border-t border-dark-800 mt-8 pt-8 flex flex-col md:flex-row justify-between items-center">
           <div className="text-gray-400 text-sm">
             © 2024 AI Commerce. All rights reserved.
           </div>
@@ -112,7 +112,7 @@ const Footer: React.FC = () => {
       </div>
 
       {/* AI Status Indicator */}
-      <div className="bg-gray-800 border-t border-gray-700">
+      <div className="bg-dark-900 border-t border-dark-800">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
           <div className="flex items-center justify-center space-x-4 text-sm">
             <div className="flex items-center space-x-2">

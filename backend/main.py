@@ -3,13 +3,18 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from contextlib import asynccontextmanager
 import logging
-from backend.database.connection import init_database, test_connection
-from backend.agents.base_agent import agent_coordinator
-from backend.agents.inventory_agent import InventoryManagementAgent
-from backend.agents.pricing_agent import PricingOptimizationAgent
-from backend.agents.customer_service_agent import CustomerServiceAgent
-from backend.agents.recommendation_agent import RecommendationAgent
-from backend.api import auth, products, orders, users, agents, analytics
+from database.connection import init_database, test_connection
+from agents.base_agent import agent_coordinator
+from agents.inventory_agent import InventoryManagementAgent
+from agents.pricing_agent import PricingOptimizationAgent
+from agents.customer_service_agent import CustomerServiceAgent
+from agents.recommendation_agent import RecommendationAgent
+from agents.data_analysis_agent import DataAnalysisAgent
+from agents.marketing_agent import MarketingAgent
+from agents.financial_agent import FinancialAnalystAgent
+from agents.seo_agent import SEOAgent
+from agents.supply_chain_agent import SupplyChainAgent
+from api import auth, products, orders, users, agents, analytics
 import asyncio
 
 # Configure logging
@@ -44,11 +49,21 @@ async def lifespan(app: FastAPI):
         pricing_agent = PricingOptimizationAgent()
         customer_service_agent = CustomerServiceAgent()
         recommendation_agent = RecommendationAgent()
+        data_analysis_agent = DataAnalysisAgent()
+        marketing_agent = MarketingAgent()
+        financial_agent = FinancialAnalystAgent()
+        seo_agent = SEOAgent()
+        supply_chain_agent = SupplyChainAgent()
         
         agent_coordinator.register_agent(inventory_agent)
         agent_coordinator.register_agent(pricing_agent)
         agent_coordinator.register_agent(customer_service_agent)
         agent_coordinator.register_agent(recommendation_agent)
+        agent_coordinator.register_agent(data_analysis_agent)
+        agent_coordinator.register_agent(marketing_agent)
+        agent_coordinator.register_agent(financial_agent)
+        agent_coordinator.register_agent(seo_agent)
+        agent_coordinator.register_agent(supply_chain_agent)
         
         await agent_coordinator.start_coordinator()
         logger.info("AI agents initialized and registered successfully")

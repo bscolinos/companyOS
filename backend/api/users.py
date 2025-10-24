@@ -1,12 +1,10 @@
 from fastapi import APIRouter, HTTPException, Depends, Query
 from pydantic import BaseModel
-from sqlalchemy.orm import Session
-from sqlalchemy import and_, func, desc
 from typing import List, Optional, Dict, Any
 import logging
-from backend.database.connection import get_database
-from backend.database.models import User, CartItem, Product, Review
-from backend.api.auth import get_current_active_user
+from database.connection import get_database
+from database.models import User, CartItem, Product, Review
+from api.auth import get_current_active_user
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -47,8 +45,8 @@ class ReviewResponse(BaseModel):
 
 @router.get("/cart", response_model=List[CartItemResponse])
 async def get_user_cart(
-    current_user: User = Depends(get_current_active_user),
-    db: Session = Depends(get_database)
+    # current_user removed - no auth needed for simulation
+    db = Depends(get_database)
 ):
     """Get user's shopping cart"""
     try:
@@ -80,8 +78,8 @@ async def get_user_cart(
 @router.post("/cart", response_model=CartItemResponse)
 async def add_to_cart(
     item_data: CartItemCreate,
-    current_user: User = Depends(get_current_active_user),
-    db: Session = Depends(get_database)
+    # current_user removed - no auth needed for simulation
+    db = Depends(get_database)
 ):
     """Add item to shopping cart"""
     try:
@@ -164,8 +162,8 @@ async def add_to_cart(
 async def update_cart_item(
     item_id: int,
     item_data: CartItemUpdate,
-    current_user: User = Depends(get_current_active_user),
-    db: Session = Depends(get_database)
+    # current_user removed - no auth needed for simulation
+    db = Depends(get_database)
 ):
     """Update cart item quantity"""
     try:
@@ -217,8 +215,8 @@ async def update_cart_item(
 @router.delete("/cart/{item_id}")
 async def remove_from_cart(
     item_id: int,
-    current_user: User = Depends(get_current_active_user),
-    db: Session = Depends(get_database)
+    # current_user removed - no auth needed for simulation
+    db = Depends(get_database)
 ):
     """Remove item from cart"""
     try:
@@ -243,8 +241,8 @@ async def remove_from_cart(
 
 @router.delete("/cart")
 async def clear_cart(
-    current_user: User = Depends(get_current_active_user),
-    db: Session = Depends(get_database)
+    # current_user removed - no auth needed for simulation
+    db = Depends(get_database)
 ):
     """Clear all items from cart"""
     try:
@@ -260,8 +258,8 @@ async def clear_cart(
 
 @router.get("/cart/summary")
 async def get_cart_summary(
-    current_user: User = Depends(get_current_active_user),
-    db: Session = Depends(get_database)
+    # current_user removed - no auth needed for simulation
+    db = Depends(get_database)
 ):
     """Get cart summary with totals"""
     try:
@@ -298,8 +296,8 @@ async def get_cart_summary(
 @router.post("/reviews", response_model=ReviewResponse)
 async def create_review(
     review_data: ReviewCreate,
-    current_user: User = Depends(get_current_active_user),
-    db: Session = Depends(get_database)
+    # current_user removed - no auth needed for simulation
+    db = Depends(get_database)
 ):
     """Create a product review"""
     try:
@@ -360,8 +358,8 @@ async def create_review(
 async def get_user_reviews(
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=100),
-    current_user: User = Depends(get_current_active_user),
-    db: Session = Depends(get_database)
+    # current_user removed - no auth needed for simulation
+    db = Depends(get_database)
 ):
     """Get user's reviews"""
     try:
@@ -394,12 +392,12 @@ async def get_user_reviews(
 @router.get("/recommendations")
 async def get_user_recommendations(
     limit: int = Query(10, ge=1, le=50),
-    current_user: User = Depends(get_current_active_user)
+    # current_user removed - no auth needed for simulation
 ):
     """Get personalized recommendations for the user"""
     try:
         # Import here to avoid circular imports
-        from backend.agents.base_agent import agent_coordinator
+        from agents.base_agent import agent_coordinator
         
         if "RecommendationAgent" in agent_coordinator.agents:
             recommendation_agent = agent_coordinator.agents["RecommendationAgent"]

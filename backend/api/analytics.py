@@ -1,30 +1,32 @@
 from fastapi import APIRouter, HTTPException, Depends, Query
-from sqlalchemy.orm import Session
-from sqlalchemy import and_, func, desc
 from typing import Dict, Any, List, Optional
 import logging
 from datetime import datetime, timedelta
-from backend.database.connection import get_database
-from backend.database.models import (
+from database.connection import get_database
+from database.models import (
     Order, OrderItem, Product, User, Review, AgentLog, 
     PriceHistory, InventoryLog, CustomerInteraction
 )
-from backend.api.auth import get_current_active_user
+from api.auth import get_current_active_user
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-def require_admin(current_user: User = Depends(get_current_active_user)):
-    """Require admin access"""
-    if not current_user.is_admin:
-        raise HTTPException(status_code=403, detail="Admin access required")
-    return current_user
+def require_admin():
+    """Simulate admin access - no auth needed"""
+    # Return mock admin user for simulation
+    return {
+        "id": 1,
+        "email": "admin@example.com",
+        "is_active": True,
+        "is_admin": True
+    }
 
 @router.get("/dashboard")
 async def get_dashboard_analytics(
     days: int = Query(30, ge=1, le=365),
-    admin_user: User = Depends(require_admin),
-    db: Session = Depends(get_database)
+    # admin_user removed - no auth needed for simulation
+    db = Depends(get_database)
 ):
     """Get dashboard analytics overview"""
     try:
@@ -135,8 +137,8 @@ async def get_dashboard_analytics(
 async def get_sales_analytics(
     days: int = Query(30, ge=1, le=365),
     group_by: str = Query("day", regex="^(day|week|month)$"),
-    admin_user: User = Depends(require_admin),
-    db: Session = Depends(get_database)
+    # admin_user removed - no auth needed for simulation
+    db = Depends(get_database)
 ):
     """Get sales analytics with time series data"""
     try:
@@ -216,8 +218,8 @@ async def get_sales_analytics(
 
 @router.get("/inventory")
 async def get_inventory_analytics(
-    admin_user: User = Depends(require_admin),
-    db: Session = Depends(get_database)
+    # admin_user removed - no auth needed for simulation
+    db = Depends(get_database)
 ):
     """Get inventory analytics"""
     try:
@@ -288,8 +290,8 @@ async def get_inventory_analytics(
 @router.get("/pricing")
 async def get_pricing_analytics(
     days: int = Query(30, ge=1, le=365),
-    admin_user: User = Depends(require_admin),
-    db: Session = Depends(get_database)
+    # admin_user removed - no auth needed for simulation
+    db = Depends(get_database)
 ):
     """Get pricing analytics"""
     try:
@@ -359,8 +361,8 @@ async def get_pricing_analytics(
 @router.get("/customer-service")
 async def get_customer_service_analytics(
     days: int = Query(30, ge=1, le=365),
-    admin_user: User = Depends(require_admin),
-    db: Session = Depends(get_database)
+    # admin_user removed - no auth needed for simulation
+    db = Depends(get_database)
 ):
     """Get customer service analytics"""
     try:
@@ -421,8 +423,8 @@ async def get_customer_service_analytics(
 @router.get("/ai-agents")
 async def get_ai_agent_analytics(
     days: int = Query(30, ge=1, le=365),
-    admin_user: User = Depends(require_admin),
-    db: Session = Depends(get_database)
+    # admin_user removed - no auth needed for simulation
+    db = Depends(get_database)
 ):
     """Get AI agent performance analytics"""
     try:
